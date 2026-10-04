@@ -5,8 +5,10 @@ import { createClient } from "@/lib/supabase/client";
 import type { Order } from "@/lib/types";
 
 type ProductEntry = { link: string; description: string };
+type AutomotivePartEntry = { image: File | null; imageUrl: string; partNumber: string };
 
 const emptyProduct: ProductEntry = { link: "", description: "" };
+const createAutomotivePart = (): AutomotivePartEntry => ({ image: null, imageUrl: "", partNumber: "" });
 
 export default function OrderModal({
   open,
@@ -21,14 +23,14 @@ export default function OrderModal({
 }) {
   const supabase = createClient();
   const [title, setTitle] = useState("");
+  const [titleEn, setTitleEn] = useState("");
   const [productImage, setProductImage] = useState<File | null>(null);
   const [productImageUrl, setProductImageUrl] = useState("");
   const [productDescription, setProductDescription] = useState("");
   const [category, setCategory] = useState("");
+  const [automotiveParts, setAutomotiveParts] = useState<AutomotivePartEntry[]>([createAutomotivePart()]);
   const [qty, setQty] = useState("");
   const [unit, setUnit] = useState("عدد");
-  const [deadline, setDeadline] = useState("");
-  const [budget, setBudget] = useState("");
   const [shipping, setShipping] = useState("");
   const [sampleRequest, setSampleRequest] = useState(false);
   const [products, setProducts] = useState<ProductEntry[]>([emptyProduct]);
@@ -38,12 +40,11 @@ export default function OrderModal({
     if (!open) return;
     if (order) {
       setTitle(order.title || "");
+      setTitleEn(order.title_en || "");
       setProductImage(null);
       setCategory(order.category || "");
       setQty(order.quantity ? String(order.quantity) : "");
       setUnit(order.unit || "عدد");
-      setDeadline(order.deadline || "");
-      setBudget(order.budget || "");
       setShipping(order.shipping_type || "");
       setSampleRequest(order.sample_request);
       supabase.from("order_products").select("*").eq("order_id", order.id).then(({ data }) => {
@@ -51,12 +52,29 @@ export default function OrderModal({
         const primaryProduct = savedProducts[0];
         setProductImageUrl(primaryProduct?.link || "");
         setProductDescription(primaryProduct?.description || "");
-        setProducts(savedProducts.length > 1 ? savedProducts.slice(1).map((p) => ({ link: p.link || "", description: p.description || "" })) : [emptyProduct]);
+        if (order.category === "قطعات خودرو") {
+          const savedParts = savedProducts.filter((product) => product.part_number);
+          if (savedParts.length) {
+            setAutomotiveParts(savedParts.map((product) => ({ image: null, imageUrl: product.link || "", partNumber: product.part_number || "" })));
+            const otherProducts = savedProducts.filter((product) => !product.part_number).map((product) => ({ link: product.link || "", description: product.description || "" }));
+            setProducts(otherProducts.length ? otherProducts : [emptyProduct]);
+          } else {
+            const hasLegacyPart = Boolean(primaryProduct?.link || order.part_number);
+            setAutomotiveParts(hasLegacyPart
+              ? [{ image: null, imageUrl: primaryProduct?.link || "", partNumber: order.part_number || "" }]
+              : [createAutomotivePart()]);
+            const otherProducts = savedProducts.slice(hasLegacyPart ? 1 : 0).map((product) => ({ link: product.link || "", description: product.description || "" }));
+            setProducts(otherProducts.length ? otherProducts : [emptyProduct]);
+          }
+        } else {
+          setAutomotiveParts([createAutomotivePart()]);
+          setProducts(savedProducts.length > 1 ? savedProducts.slice(1).map((product) => ({ link: product.link || "", description: product.description || "" })) : [emptyProduct]);
+        }
       });
     } else {
-      setTitle(""); setProductImage(null); setProductImageUrl(""); setProductDescription("");
-      setCategory(""); setQty(""); setUnit("عدد");
-      setDeadline(""); setBudget(""); setShipping(""); setSampleRequest(false);
+      setTitle(""); setTitleEn(""); setProductImage(null); setProductImageUrl(""); setProductDescription("");
+      setCategory(""); setAutomotiveParts([createAutomotivePart()]); setQty(""); setUnit("عدد");
+      setShipping(""); setSampleRequest(false);
       setProducts([emptyProduct]);
     }
   }, [open, order, supabase]);
@@ -66,13 +84,26 @@ export default function OrderModal({
   function updateProduct(i: number, field: keyof ProductEntry, value: string) {
     setProducts((prev) => prev.map((p, idx) => (idx === i ? { ...p, [field]: value } : p)));
   }
+  function updateAutomotivePart(i: number, changes: Partial<AutomotivePartEntry>) {
+    setAutomotiveParts((prev) => prev.map((part, idx) => (idx === i ? { ...part, ...changes } : part)));
+  }
   function removeProduct(i: number) {
     setProducts((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
+  }
+  function removeAutomotivePart(i: number) {
+    setAutomotiveParts((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
   }
 
   async function handleSubmit() {
     if (!title.trim()) { alert("لطفاً نام کالا را وارد کنید."); return; }
-    if (productImage && (!productImage.type.startsWith("image/") || productImage.size > 5 * 1024 * 1024)) {
+    if (category === "قطعات خودرو" && automotiveParts.some((part) => Boolean(part.image || part.imageUrl) !== Boolean(part.partNumber.trim()))) {
+      alert("برای هر عکس قطعه، شماره فنی همان قطعه را هم وارد کنید.");
+      return;
+    }
+    const selectedImages = category === "قطعات خودرو"
+      ? automotiveParts.map((part) => part.image).filter((image): image is File => image !== null)
+      : productImage ? [productImage] : [];
+    if (selectedImages.some((image) => !image.type.startsWith("image/") || image.size > 5 * 1024 * 1024)) {
       alert("لطفاً یک عکس معتبر با حجم کمتر از ۵ مگابایت انتخاب کنید.");
       return;
     }
@@ -83,11 +114,11 @@ export default function OrderModal({
     const payload = {
       user_id: user.id,
       title: title.trim(),
+      title_en: titleEn.trim() || null,
       category: category || null,
+      part_number: category === "قطعات خودرو" ? automotiveParts.find((part) => part.partNumber.trim())?.partNumber.trim() || null : null,
       quantity: qty || null,
       unit: unit || null,
-      deadline: deadline || null,
-      budget: budget || null,
       shipping_type: shipping || null,
       sample_request: sampleRequest,
     };
@@ -102,29 +133,59 @@ export default function OrderModal({
       orderId = data.id;
     }
 
-    let uploadedImageUrl = productImageUrl;
-    if (productImage) {
-      const fileExtension = productImage.name.split(".").pop() || "jpg";
-      const filePath = `${user.id}/${orderId}-${Date.now()}.${fileExtension}`;
-      const { error: uploadError } = await supabase.storage.from("product-images").upload(filePath, productImage, { upsert: true });
-      if (uploadError) {
-        alert("آپلود عکس انجام نشد. لطفاً مطمئن شوید bucket با نام product-images در Supabase ساخته شده است.");
-        setSaving(false);
-        return;
+    const entries: { link: string | null; description: string | null; part_number: string | null }[] = [];
+    if (category === "قطعات خودرو") {
+      for (const [index, part] of automotiveParts.entries()) {
+        if (!part.image && !part.imageUrl && !part.partNumber.trim()) continue;
+        let imageUrl = part.imageUrl;
+        if (part.image) {
+          const fileExtension = part.image.name.split(".").pop() || "jpg";
+          const filePath = `${user.id}/${orderId}-part-${index + 1}-${Date.now()}.${fileExtension}`;
+          const { error: uploadError } = await supabase.storage.from("product-images").upload(filePath, part.image, { upsert: true });
+          if (uploadError) {
+            alert("آپلود عکس انجام نشد. لطفاً مطمئن شوید bucket با نام product-images در Supabase ساخته شده است.");
+            setSaving(false);
+            return;
+          }
+          imageUrl = supabase.storage.from("product-images").getPublicUrl(filePath).data.publicUrl;
+        }
+        entries.push({
+          link: imageUrl || null,
+          description: index === 0 ? productDescription.trim() || null : null,
+          part_number: part.partNumber.trim() || null,
+        });
       }
-      uploadedImageUrl = supabase.storage.from("product-images").getPublicUrl(filePath).data.publicUrl;
+    } else {
+      let uploadedImageUrl = productImageUrl;
+      if (productImage) {
+        const fileExtension = productImage.name.split(".").pop() || "jpg";
+        const filePath = `${user.id}/${orderId}-${Date.now()}.${fileExtension}`;
+        const { error: uploadError } = await supabase.storage.from("product-images").upload(filePath, productImage, { upsert: true });
+        if (uploadError) {
+          alert("آپلود عکس انجام نشد. لطفاً مطمئن شوید bucket با نام product-images در Supabase ساخته شده است.");
+          setSaving(false);
+          return;
+        }
+        uploadedImageUrl = supabase.storage.from("product-images").getPublicUrl(filePath).data.publicUrl;
+      }
+      if (uploadedImageUrl || productDescription.trim()) {
+        entries.push({ link: uploadedImageUrl || null, description: productDescription.trim() || null, part_number: null });
+      }
     }
+    entries.push(...products.filter((product) => product.link.trim() || product.description.trim()).map((product) => ({
+      link: product.link.trim() || null,
+      description: product.description.trim() || null,
+      part_number: null,
+    })));
 
     if (order?.id) {
-      await supabase.from("order_products").delete().eq("order_id", order.id);
+      const { error: deleteError } = await supabase.from("order_products").delete().eq("order_id", order.id);
+      if (deleteError) { alert("خطا در ویرایش محصولات سفارش: " + deleteError.message); setSaving(false); return; }
     }
 
-    const entries = [
-      ...(uploadedImageUrl || productDescription.trim() ? [{ link: uploadedImageUrl || null, description: productDescription.trim() || null }] : []),
-      ...products.filter((p) => p.link.trim() || p.description.trim()),
-    ];
     if (entries.length) {
-      await supabase.from("order_products").insert(entries.map((p) => ({ ...p, order_id: orderId })));
+      const { error: productsError } = await supabase.from("order_products").insert(entries.map((product) => ({ ...product, order_id: orderId })));
+      if (productsError) { alert("خطا در ثبت محصولات سفارش: " + productsError.message); setSaving(false); return; }
     }
 
     setSaving(false);
@@ -139,17 +200,9 @@ export default function OrderModal({
         <button className="modal-close" onClick={onClose} title="بستن">×</button>
         <h2>{order ? `ویرایش سفارش #${order.order_number}` : "ثبت سفارش جدید"}</h2>
 
-        <div className="field"><label>نام کالا</label><input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="مثلاً دستگاه یا قطعه صنعتی" /></div>
-
-        <div className="field">
-          <label>عکس محصول</label>
-          <input type="file" accept="image/*" onChange={(e) => setProductImage(e.target.files?.[0] || null)} />
-          {productImageUrl && <img className="product-image-preview" src={productImageUrl} alt="عکس محصول" />}
-        </div>
-
-        <div className="field">
-          <label>توضیحات محصول</label>
-          <textarea value={productDescription} onChange={(e) => setProductDescription(e.target.value)} placeholder="مثلاً سایز، رنگ، جنس یا ویژگی مورد نظر خود را بنویسید" />
+        <div className="product-names" role="group" aria-label="نام کالا">
+          <div className="field"><label>نام کالا به فارسی</label><input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="مثلاً قطعه خودرو" /></div>
+          <div className="field"><label>نام کالا به انگلیسی</label><input type="text" dir="ltr" value={titleEn} onChange={(e) => setTitleEn(e.target.value)} placeholder="Enter product name in English" /></div>
         </div>
 
         <div className="field">
@@ -158,6 +211,7 @@ export default function OrderModal({
             <option value="">انتخاب دسته‌بندی</option>
             <option>لوازم الکترونیکی</option>
             <option>قطعات صنعتی</option>
+            <option>قطعات خودرو</option>
             <option>تجهیزات ساختمانی</option>
             <option>مواد اولیه</option>
             <option>ماشین‌آلات</option>
@@ -165,6 +219,40 @@ export default function OrderModal({
             <option>پوشاک و نساجی</option>
             <option>سایر</option>
           </select>
+        </div>
+
+        {category === "قطعات خودرو" ? (
+          <div className="field">
+            <label>عکس و شماره فنی قطعات</label>
+            <div className="automotive-part-list">
+              {automotiveParts.map((part, index) => (
+                <div className="automotive-part-row" key={index}>
+                  <div className="field">
+                    <label>عکس قطعه {index + 1}</label>
+                    <input type="file" accept="image/*" onChange={(e) => updateAutomotivePart(index, { image: e.target.files?.[0] || null })} />
+                    {part.imageUrl && <img className="product-image-preview" src={part.imageUrl} alt={`عکس قطعه ${index + 1}`} />}
+                  </div>
+                  <div className="field">
+                    <label>شماره فنی</label>
+                    <input type="text" dir="ltr" value={part.partNumber} onChange={(e) => updateAutomotivePart(index, { partNumber: e.target.value })} placeholder="شماره فنی" />
+                  </div>
+                  {automotiveParts.length > 1 && <button type="button" className="remove-btn" onClick={() => removeAutomotivePart(index)} aria-label={`حذف قطعه ${index + 1}`} title="حذف قطعه">×</button>}
+                </div>
+              ))}
+            </div>
+            <button type="button" className="add-link" onClick={() => setAutomotiveParts((prev) => [...prev, createAutomotivePart()])}>+ افزودن عکس و شماره فنی</button>
+          </div>
+        ) : (
+          <div className="field">
+            <label>عکس محصول</label>
+            <input type="file" accept="image/*" onChange={(e) => setProductImage(e.target.files?.[0] || null)} />
+            {productImageUrl && <img className="product-image-preview" src={productImageUrl} alt="عکس محصول" />}
+          </div>
+        )}
+
+        <div className="field">
+          <label>توضیحات محصول</label>
+          <textarea value={productDescription} onChange={(e) => setProductDescription(e.target.value)} placeholder="مثلاً سایز، رنگ، جنس یا ویژگی مورد نظر خود را بنویسید" />
         </div>
 
         <div className="field">
@@ -195,27 +283,13 @@ export default function OrderModal({
           <button type="button" className="add-link" onClick={() => setProducts((prev) => [...prev, emptyProduct])}>+ افزودن لینک / توضیحات دیگر</button>
         </div>
 
-        <div className="three-col">
-          <div className="field">
-            <label>مهلت مورد نیاز</label>
-            <select value={deadline} onChange={(e) => setDeadline(e.target.value)}>
-              <option value="">انتخاب کنید</option>
-              <option>فوری (کمتر از ۲ هفته)</option>
-              <option>حدود ۱ ماه</option>
-              <option>۲ تا ۳ ماه</option>
-              <option>بیش از ۳ ماه</option>
-              <option>بدون عجله</option>
-            </select>
-          </div>
-          <div className="field"><label>بودجه / قیمت مورد نظر</label><input type="text" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="مثلاً ۱۵٬۰۰۰ یوان" /></div>
-          <div className="field">
+        <div className="field">
             <label>نوع حمل</label>
             <select value={shipping} onChange={(e) => setShipping(e.target.value)}>
               <option value="">انتخاب کنید</option>
               <option>دریایی</option><option>هوایی</option><option>زمینی</option>
               <option>ترکیبی (هوایی + زمینی)</option><option>فرقی نمی‌کند</option>
             </select>
-          </div>
         </div>
 
         <div className="field">

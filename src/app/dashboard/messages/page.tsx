@@ -1,21 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import ChatPanel from "@/components/ChatPanel";
 import type { Order, Ticket } from "@/lib/types";
 
 export default function MessagesPage() {
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
   const [tab, setTab] = useState<"tickets" | "chat">("tickets");
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [ticketText, setTicketText] = useState("");
   const [loadingTickets, setLoadingTickets] = useState(true);
 
-  async function loadTickets() {
-    setLoadingTickets(true);
+  const loadTickets = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoadingTickets(false); return; }
     const { data } = await supabase
@@ -25,11 +26,12 @@ export default function MessagesPage() {
       .order("created_at", { ascending: false });
     setTickets(data || []);
     setLoadingTickets(false);
-  }
+  }, [supabase]);
 
-  async function loadOrders() {
+  const loadOrders = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
+    setCurrentUserId(user.id);
     const { data } = await supabase
       .from("orders")
       .select("*")
@@ -38,9 +40,51 @@ export default function MessagesPage() {
     const customerOrders = (data as Order[]) || [];
     setOrders(customerOrders);
     setSelectedOrderId((current) => current || customerOrders[0]?.id || null);
-  }
+  }, [supabase]);
 
-  useEffect(() => { loadTickets(); loadOrders(); }, []);
+  useEffect(() => { loadTickets(); loadOrders(); }, [loadOrders, loadTickets]);
+
+  useEffect(() => {
+    if (!currentUserId || !orders.length) return;
+    let mounted = true;
+    const orderIds = orders.map((order) => order.id);
+    const seenMessageIds = new Set<string>();
+
+    async function syncUnreadCounts() {
+      const [{ data: reads }, { data: incomingMessages }] = await Promise.all([
+        supabase.from("order_chat_reads").select("order_id,last_read_at").eq("user_id", currentUserId).in("order_id", orderIds),
+        supabase.from("order_comments").select("id,order_id,created_at").eq("author_type", "agent").in("order_id", orderIds),
+      ]);
+      if (!mounted) return;
+      const readTimes = new Map((reads || []).map((read) => [read.order_id, new Date(read.last_read_at).getTime()]));
+      const counts: Record<string, number> = {};
+      for (const message of incomingMessages || []) {
+        seenMessageIds.add(message.id);
+        if (new Date(message.created_at).getTime() > (readTimes.get(message.order_id) || 0)) {
+          counts[message.order_id] = (counts[message.order_id] || 0) + 1;
+        }
+      }
+      if (tab === "chat" && selectedOrderId && document.visibilityState === "visible") counts[selectedOrderId] = 0;
+      setUnreadCounts(counts);
+    }
+
+    const channel = supabase.channel(`chat-inbox:${currentUserId}`, { config: { private: true } })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_comments" }, (payload) => {
+        const message = payload.new as { id: string; order_id: string; author_type: string };
+        if (message.author_type !== "agent" || !orderIds.includes(message.order_id) || seenMessageIds.has(message.id)) return;
+        seenMessageIds.add(message.id);
+        if (tab === "chat" && message.order_id === selectedOrderId && document.visibilityState === "visible") return;
+        setUnreadCounts((current) => ({ ...current, [message.order_id]: (current[message.order_id] || 0) + 1 }));
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") void syncUnreadCounts();
+      });
+
+    return () => {
+      mounted = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUserId, orders, selectedOrderId, supabase, tab]);
 
   async function sendTicket() {
     if (!ticketText.trim()) { alert("لطفاً متن تیکت را بنویسید."); return; }
@@ -104,7 +148,7 @@ export default function MessagesPage() {
         <div className="chat-orders-list">
           <h3>سفارش‌های من</h3>
           {!orders.length && <div className="empty-state">هنوز سفارشی ثبت نکرده‌اید.</div>}
-          {orders.map((order) => <button className={selectedOrderId === order.id ? "selected" : ""} key={order.id} onClick={() => setSelectedOrderId(order.id)}><strong>#{order.order_number}</strong><span>{order.title}</span><small>{order.status}</small></button>)}
+          {orders.map((order) => <button className={selectedOrderId === order.id ? "selected" : ""} key={order.id} onClick={() => { setSelectedOrderId(order.id); setUnreadCounts((current) => ({ ...current, [order.id]: 0 })); }}><strong>#{order.order_number}</strong><span>{order.title}</span><small>{order.status}{unreadCounts[order.id] ? ` · ${unreadCounts[order.id]} پیام جدید` : ""}</small></button>)}
         </div>
         {selectedOrderId ? <ChatPanel orderId={selectedOrderId} mode="customer" /> : <div className="chat-placeholder">یک سفارش را برای شروع گفتگو انتخاب کنید.</div>}
       </div>}

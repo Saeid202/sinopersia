@@ -3,7 +3,10 @@ export type Order = {
   order_number: string;
   user_id: string;
   title: string;
+  title_en: string | null;
   category: string | null;
+  part_number: string | null;
+  assigned_agent_id: string | null;
   quantity: number | null;
   unit: string | null;
   deadline: string | null;
@@ -21,6 +24,7 @@ export type OrderProduct = {
   order_id: string;
   link: string | null;
   description: string | null;
+  part_number: string | null;
 };
 
 export type OrderComment = {
@@ -69,7 +73,7 @@ export type Profile = {
   address: string | null;
   postal_code: string | null;
   email: string | null;
-  role: "customer" | "agent" | "admin";
+  role: "customer" | "agent" | "admin" | "seller";
 };
 
 export function statusClass(status: string) {

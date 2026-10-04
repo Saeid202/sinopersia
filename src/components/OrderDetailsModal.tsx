@@ -14,6 +14,7 @@ export default function DetailsModal({ order, onClose }: { order: Order | null; 
   }, [order, supabase]);
 
   if (!order) return null;
+  const hasProductPartNumbers = products.some((product) => product.part_number);
 
   return (
     <div className="modal show" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -23,8 +24,10 @@ export default function DetailsModal({ order, onClose }: { order: Order | null; 
         <div className="details-grid">
           <div className="details-item"><label>شماره سفارش</label><div className="value">#{order.order_number}</div></div>
           <div className="details-item"><label>وضعیت</label><div className="value">{order.status}</div></div>
-          <div className="details-item"><label>عنوان</label><div className="value">{order.title}</div></div>
+          <div className="details-item"><label>نام کالا به فارسی</label><div className="value">{order.title}</div></div>
+          <div className="details-item"><label>نام کالا به انگلیسی</label><div className="value" dir="ltr">{order.title_en || "—"}</div></div>
           <div className="details-item"><label>دسته‌بندی</label><div className="value">{order.category || "—"}</div></div>
+          {order.category === "قطعات خودرو" && order.part_number && products.length === 0 && <div className="details-item"><label>شماره فنی</label><div className="value" dir="ltr">{order.part_number}</div></div>}
           <div className="details-item"><label>تاریخ ثبت</label><div className="value">{new Date(order.created_at).toLocaleDateString("fa-IR")}</div></div>
           <div className="details-item"><label>تعداد</label><div className="value">{order.quantity || "—"} {order.unit || ""}</div></div>
           <div className="details-item"><label>قیمت</label><div className="value">{order.price || "—"}</div></div>
@@ -32,15 +35,19 @@ export default function DetailsModal({ order, onClose }: { order: Order | null; 
           <div className="details-item"><label>مهلت</label><div className="value">{order.deadline || "—"}</div></div>
           <div className="details-item"><label>بودجه</label><div className="value">{order.budget || "—"}</div></div>
           <div className="details-item details-full"><label>توضیحات</label><div className="value">{order.notes || "—"}</div></div>
-          {products.map((p) => (
-            <div className="details-item details-full" key={p.id}>
-              <label>محصول</label>
-              <div className="value">
-                {p.link && <img className="product-image-details" src={p.link} alt="عکس محصول" />}
-                {p.description || (!p.link ? "—" : "")}
+          {products.map((p, index) => {
+            const partNumber = p.part_number || (!hasProductPartNumbers && index === 0 ? order.part_number : null);
+            return (
+              <div className="details-item details-full" key={p.id}>
+                <label>{order.category === "قطعات خودرو" && partNumber ? `قطعه ${index + 1}` : "محصول"}</label>
+                <div className="value">
+                  {p.link && <img className="product-image-details" src={p.link} alt="عکس محصول" />}
+                  {order.category === "قطعات خودرو" && partNumber && <div dir="ltr">شماره فنی: {partNumber}</div>}
+                  {p.description || (!p.link ? "—" : "")}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
         <div className="modal-actions">
           <button className="secondary" onClick={onClose}>بستن</button>

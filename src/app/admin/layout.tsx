@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import BrandLogo from "@/components/BrandLogo";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
@@ -27,7 +28,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="layout">
       <aside className="sidebar">
-        <div className="logo">SINO <span>PERSIA</span></div>
+        <BrandLogo className="sidebar-logo" priority />
         <nav className="nav">
           <a className="active" href="/admin"><span className="nav-icon">⚙</span> مدیریت سایت</a>
         </nav>

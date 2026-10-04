@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { startTransition, useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { statusClass, type Order, type Profile } from "@/lib/types";
 
@@ -9,18 +9,18 @@ type AdminOrder = Order & { profiles: { full_name: string | null; email: string 
 type Tab = "overview" | "users" | "orders";
 
 export default function AdminPage() {
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
   const [tab, setTab] = useState<Tab>("overview");
   const [profiles, setProfiles] = useState<AdminProfile[]>([]);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  async function loadData() {
-    setLoading(true);
+  const loadData = useCallback(async () => {
     const [{ data: profileData }, { data: orderData }] = await Promise.all([
       supabase.from("profiles").select("*").order("full_name"),
       supabase.from("orders").select("*").order("created_at", { ascending: false }),
@@ -29,15 +29,27 @@ export default function AdminPage() {
     const profileMap = new Map(((profileData as AdminProfile[]) || []).map((profile) => [profile.id, profile]));
     setOrders(((orderData as Order[]) || []).map((order) => ({ ...order, profiles: profileMap.get(order.user_id) || null })));
     setLoading(false);
-  }
+  }, [supabase]);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { startTransition(() => { void loadData(); }); }, [loadData]);
 
   async function changeRole(profile: AdminProfile, role: Profile["role"]) {
     if (profile.role === role) return;
     const { error } = await supabase.from("profiles").update({ role }).eq("id", profile.id);
     if (error) { alert("تغییر نقش انجام نشد: " + error.message); return; }
     setProfiles((current) => current.map((item) => item.id === profile.id ? { ...item, role } : item));
+  }
+
+  async function assignAgent(orderId: string, agentId: string) {
+    setAssigningOrderId(orderId);
+    const assignedAgentId = agentId || null;
+    const { error } = await supabase.rpc("assign_order_agent", {
+      order_id_input: orderId,
+      agent_id_input: assignedAgentId,
+    });
+    setAssigningOrderId(null);
+    if (error) { alert("تخصیص ایجنت انجام نشد: " + error.message); return; }
+    setOrders((current) => current.map((order) => order.id === orderId ? { ...order, assigned_agent_id: assignedAgentId } : order));
   }
 
   async function createAgent(event: React.FormEvent<HTMLFormElement>) {
@@ -96,11 +108,11 @@ export default function AdminPage() {
       </>}
 
       {tab === "users" && <section className="admin-panel"><div className="admin-panel-head"><h2>کاربران و نقش‌ها</h2><span>{profiles.length} حساب</span></div>
-        {loading ? <div className="empty-state">در حال بارگذاری...</div> : <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>نام</th><th>ایمیل</th><th>نقش</th><th>شناسه</th></tr></thead><tbody>{profiles.map((profile) => <tr key={profile.id}><td>{profile.full_name || "بدون نام"}</td><td>{profile.email || "—"}</td><td><select value={profile.role} onChange={(e) => changeRole(profile, e.target.value as Profile["role"])}><option value="customer">مشتری</option><option value="agent">ایجنت</option><option value="admin">ادمین</option></select></td><td className="admin-id">{profile.id.slice(0, 8)}...</td></tr>)}</tbody></table></div>}
+        {loading ? <div className="empty-state">در حال بارگذاری...</div> : <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>نام</th><th>ایمیل</th><th>نقش</th><th>شناسه</th></tr></thead><tbody>{profiles.map((profile) => <tr key={profile.id}><td>{profile.full_name || "بدون نام"}</td><td>{profile.email || "—"}</td><td><select value={profile.role} onChange={(e) => changeRole(profile, e.target.value as Profile["role"])}><option value="customer">مشتری</option><option value="agent">ایجنت</option><option value="admin">ادمین</option><option value="seller">فروشنده</option></select></td><td className="admin-id">{profile.id.slice(0, 8)}...</td></tr>)}</tbody></table></div>}
       </section>}
 
       {tab === "orders" && <section className="admin-panel"><div className="admin-panel-head"><h2>همه سفارش‌ها</h2><span>{orders.length} سفارش</span></div>
-        {loading ? <div className="empty-state">در حال بارگذاری...</div> : <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>شماره</th><th>محصول</th><th>مشتری</th><th>تاریخ</th><th>وضعیت</th><th>قیمت</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td>#{order.order_number}</td><td>{order.title}</td><td>{order.profiles?.full_name || order.profiles?.email || "—"}</td><td>{new Date(order.created_at).toLocaleDateString("fa-IR")}</td><td><span className={`status ${statusClass(order.status)}`}>{order.status}</span></td><td>{order.price || "—"}</td></tr>)}</tbody></table></div>}
+        {loading ? <div className="empty-state">در حال بارگذاری...</div> : <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>شماره</th><th>محصول</th><th>مشتری</th><th>ایجنت مسئول</th><th>تاریخ</th><th>وضعیت</th><th>قیمت</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td>#{order.order_number}</td><td>{order.title}</td><td>{order.profiles?.full_name || order.profiles?.email || "—"}</td><td><select aria-label={`ایجنت مسئول سفارش ${order.order_number}`} value={order.assigned_agent_id || ""} disabled={assigningOrderId === order.id} onChange={(event) => assignAgent(order.id, event.target.value)}><option value="">تعیین نشده</option>{profiles.filter((profile) => profile.role === "agent").map((agent) => <option key={agent.id} value={agent.id}>{agent.full_name || agent.email || "ایجنت"}</option>)}</select></td><td>{new Date(order.created_at).toLocaleDateString("fa-IR")}</td><td><span className={`status ${statusClass(order.status)}`}>{order.status}</span></td><td>{order.price || "—"}</td></tr>)}</tbody></table></div>}
       </section>}
     </div>
   );

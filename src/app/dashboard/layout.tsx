@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import BrandLogo from "@/components/BrandLogo";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "سفارشات", icon: "📦" },
@@ -36,7 +37,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="layout">
       <aside className="sidebar">
-        <div className="logo">SINO <span>PERSIA</span></div>
+        <BrandLogo className="sidebar-logo" priority />
         <nav className="nav">
           {NAV_ITEMS.map((item) => (
             <Link key={item.href} href={item.href} className={pathname === item.href ? "active" : ""}>

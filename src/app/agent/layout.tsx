@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import BrandLogo from "@/components/BrandLogo";
 
 export default function AgentLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
@@ -30,7 +31,7 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
   return (
     <div className="layout">
       <aside className="sidebar">
-        <div className="logo">SINO <span>PERSIA</span></div>
+        <BrandLogo className="sidebar-logo" priority />
         <nav className="nav">
           <Link href="/agent" className={pathname === "/agent" ? "active" : ""}>
             <span className="nav-icon">📋</span> صف سفارشات
