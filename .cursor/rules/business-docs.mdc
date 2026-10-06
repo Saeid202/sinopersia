@@ -1,0 +1,21 @@
+---
+description: Keep the Sino Persia business documents in sync when product behavior changes
+alwaysApply: true
+---
+
+# Business documentation
+
+Business docs live in `docs/business/en.md` and `docs/business/fa.md`. They describe what Sino Persia is and what it does for customers, agents, admins, and sellers. They are not the technical spec.
+
+When a change alters a user-facing feature, role, journey, status, commercial rule, or a stated limitation, update both files in the same change:
+
+- Keep the same facts in both languages. Wording may differ; meaning may not.
+- Update the "Last updated" date in both files.
+- Describe the behavior a person can use, not file names, APIs, or schema.
+- If a capability is unfinished or placeholder, say so. Do not document it as live.
+- Skip the docs only for internal refactors that do not change what the product does.
+
+```md
+<!-- ❌ BAD: shop checkout now charges a card, but only en.md mentions it -->
+<!-- ✅ GOOD: both en.md and fa.md say the shop submits a purchase request and payment still happens after a quote -->
+```

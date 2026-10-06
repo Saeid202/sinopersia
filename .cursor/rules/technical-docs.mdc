@@ -1,0 +1,23 @@
+---
+description: Keep the Sino Persia technical documents in sync after code changes
+alwaysApply: true
+---
+
+# Technical documentation
+
+Technical docs live in `docs/technical/en.md` and `docs/technical/fa.md`. They describe how the app is built: stack, setup, routes, auth, data, storage, and server behavior. Business meaning stays in `docs/business/`.
+
+When a code change adds, removes, or alters setup, dependencies, routes, auth, schema, storage, APIs, or behavior these docs describe, update both technical files in the same change:
+
+- Keep the same facts in both languages. Wording may differ; meaning may not.
+- Update the "Last updated" date in both files.
+- Name the real paths, tables, env vars, and limits. Do not describe a planned design as if it already exists.
+- If the UI and the database disagree, document both.
+- Skip only edits that do not change anything the technical docs describe, such as a comment or a color.
+
+A user-facing change still follows `.cursor/rules/business-docs.mdc` as well.
+
+```md
+<!-- ❌ BAD: a new API route is merged and only en.md mentions it -->
+<!-- ✅ GOOD: both technical docs list the route, who can call it, and what it writes -->
+```
