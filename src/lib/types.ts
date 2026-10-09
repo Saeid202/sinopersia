@@ -66,6 +66,16 @@ export type AgentMessage = {
   orders?: { order_number: string } | null;
 };
 
+export type ContactMessage = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  message: string;
+  status: "جدید" | "خوانده‌شده";
+  created_at: string;
+};
+
 export type Profile = {
   id: string;
   full_name: string | null;

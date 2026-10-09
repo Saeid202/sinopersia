@@ -1,6 +1,6 @@
 # Sino Persia — Business overview
 
-Last updated: 6 October 2026
+Last updated: 9 October 2026
 
 This document explains what Sino Persia is and what the product does today. It is written for founders, operations, sales, and partners. A separate technical document will come later.
 
@@ -8,7 +8,7 @@ This document explains what Sino Persia is and what the product does today. It i
 
 Sino Persia helps people in Iran buy from more than one seller in China and receive the goods as one shipment.
 
-A customer can either describe what they want and have a Sino Persia specialist source it, or choose products already listed in the Sino Persia shop. In both cases the commercial promise is the same: the goods are gathered, the final cost is confirmed with the customer before payment, and the customer can follow the order until it is sent to Iran.
+A customer can either describe what they want and have a Sino Persia specialist source it, or choose products already listed in the Sino Persia shop. In both cases the goods are gathered and the customer can follow the order until it is sent to Iran. A sourcing request still has its final amount confirmed before any money is collected. A shop purchase charges the goods total in rials at checkout, through a gateway an admin has turned on. Shipping is not part of that shop charge.
 
 The public promise, stated on the homepage, is: several sellers in China, one shipment to Iran.
 
@@ -29,7 +29,7 @@ This is most useful when a buyer needs several items, from several sellers, in t
 | --- | --- |
 | Customer | Place a sourcing request, buy from the shop, follow the order, and talk to the specialist |
 | Agent | Review customer orders, set the price and status, and talk to the customer |
-| Admin | See the whole operation, create agent accounts, assign an agent to an order, and set each person's role |
+| Admin | See the whole operation, create agent accounts, assign an agent to a sourcing order, set each person's role, manage shop categories and products, turn payment gateways on, and export the main lists |
 | Seller | Open a store, list products in Chinese yuan or US dollars, and publish them to the shop |
 
 The customer-facing site is in Persian. Seller Centre can be used in English or Persian.
@@ -41,7 +41,7 @@ The customer-facing site is in Persian. Seller Centre can be used in English or 
 3. **Consolidate.** The parcels are gathered in the China warehouse.
 4. **Ship to Iran.** The consolidated order is sent as one shipment.
 
-Before the customer pays, Sino Persia states the final amount for confirmation. The customer is not expected to pay a guessed total.
+Before a sourcing customer pays, Sino Persia states the final amount for confirmation. A shop purchase pays the goods total at checkout. Shipping for that purchase is still arranged separately.
 
 ## Two ways to buy
 
@@ -59,9 +59,9 @@ The customer can later view, edit, or delete their own order, and leave a commen
 
 The shop is a catalogue of products that sellers have published. A visitor can browse without an account: search by name or SKU, filter by category, sort by newest or by price, and open a product page.
 
-Adding to the cart does not buy the goods. The cart is saved in the browser. At checkout the customer must sign in, then submit a **purchase request**. That request becomes a normal order in their account, with the category "shop". The prices shown in the cart are estimates of the goods only. Shipping is not included, and the specialist confirms the final amount and shipping before payment.
+Adding to the cart does not buy the goods. The cart is saved in the browser. At checkout the customer must sign in, choose an enabled gateway, and pay. That payment becomes a normal order in their account, with the category "shop". The shop list, each product page, and the cart show the yuan or dollar price and, beside it, the same amount in rials. The rial figure uses the market board already cached for the rate tape, so the shop does not ask the market once for every product. The cart charges that rial total. The server calculates it again from the current board; the browser cannot set the amount. When a seller saves or publishes a product, the conversion at that moment is also stored on the product row. Shipping is not included and is still arranged separately.
 
-If a product is no longer available, or the requested quantity is higher than the current stock, the request cannot be submitted until the cart is corrected.
+If a product is no longer available, or the requested quantity is higher than the current stock, checkout stops until the cart is corrected. If no gateway is enabled, the cart says so and does not charge.
 
 ## Order lifecycle
 
@@ -74,13 +74,13 @@ An agent moves an order through these statuses:
 | Awaiting customer confirmation | A price has been prepared and the customer needs to confirm it. |
 | Completed | The order is finished. |
 
-The customer dashboard counts active orders, orders awaiting review, and completed orders. The quoted price is shown on the order once an agent has entered it. There is no card or bank payment inside the product. Recording the price and the status is what the product does; collecting the money happens outside it.
+The customer dashboard keeps two lists. ثبت سفارش is the sourcing requests the customer creates. خرید فروشگاه is what they paid for in the shop. Each list counts its own active, awaiting-review, and completed rows. A shop purchase can be opened, but it is not edited in the sourcing form.
 
 ## The customer account
 
 A customer signs in with email and password and can reset a forgotten password. The account has three areas:
 
-- **Orders.** Create, view, edit, and delete sourcing requests, and see shop purchase requests in the same list.
+- **Orders.** Create, view, edit, and delete sourcing requests. Shop purchases are a separate list on the same page. Those can be viewed. They are not edited as sourcing requests.
 - **Messages.** Open a support ticket, read replies from support, or chat with the agent about a specific order. Unread agent messages are marked.
 - **Profile.** Save name, mobile number, address, and postal code. Email is the sign-in address and is not edited here.
 
@@ -95,7 +95,7 @@ An agent sees incoming customer orders, searches by order number, product, or cu
 - set the status and the final price
 - send an optional note to the customer when the price is saved
 
-Agents do not manage the shop catalogue. Admin assigns which agent is responsible for an order.
+Agents do not manage the shop catalogue. Shop purchases are not in the agent queue. They stay on the admin shop-purchases list and on the customer's shop-purchases tab. Admin assigns which agent is responsible for a sourcing order.
 
 ## The admin
 
@@ -105,6 +105,10 @@ Admin is the operations view of the whole service:
 - create an agent account with a name, email, and temporary password
 - change a person's role among customer, agent, admin, and seller
 - see every order, who placed it, its status and price, and assign or clear the responsible agent
+- search, filter, and page the user list, sourcing orders, shop purchases, contact messages, and the payment report. Ten rows show on each page. Users filter by role. Sourcing orders and shop purchases filter by status. Messages filter by new or read. The payment report filters by status, gateway, and sandbox or live. Excel download includes every matching row, not only the page on screen.
+- turn Zarinpal or Bank Mellat on or off, store that gateway's keys, and switch it between sandbox and live. Customers only see gateways that are on. A charge fails if the keys for that gateway are missing.
+- open Product management and keep the shop categories: add one, rename it, or delete it when no product still uses it
+- see every shop product, edit its names, category, SKU, price, currency, and stock, pause or republish it, or delete it
 
 ## Seller Centre
 
@@ -114,14 +118,18 @@ Inside Seller Centre the seller can:
 
 - rename the store and see when the store was created
 - add, edit, pause, republish, and delete products
-- list a product with an English name, an optional Persian name, descriptions in both languages, a category, an optional SKU, a price in CNY or USD, a stock quantity, and an image under 5 MB
+- list a product with an English name, an optional Persian name, descriptions in both languages, a category from the admin list, an optional SKU, a price in CNY or USD, a stock quantity, and an image under 5 MB
 - upload a text PDF catalogue, review the extracted rows, correct them, reject rows that should not be listed, and publish only the rows they approve
 
 Nothing from a PDF is published automatically. Scanned PDFs, which contain no extractable text, are not supported. The seller must give every approved row an English name, a category, a price, a currency, and a stock quantity before it can go live. A paused product disappears from the shop. A deleted product is removed.
 
-Seller Centre has an Orders page. It does not receive shop orders yet. Store order management is still to be built. Today, a shop purchase request is handled as a customer order by the agent, not as an order inside the seller's store.
+Seller Centre orders lists shop purchases that include that seller's own products: order number, date, status, and each line's quantity and unit price. The seller cannot change the status or mark the order fulfilled there. Custom sourcing requests are not in that list. Until `supabase/seller-orders.sql` has been run once, the page says so and stays empty.
 
 Account settings let the seller change their password or sign out.
+
+## Market rates
+
+The homepage, the shop, and the contact page show the free-market price of one US dollar and one Chinese yuan in rials. The figures come from the TGJU market board. The page checks again about once a minute. The clock on the tape is the time of the last market change, so a price that has not moved stays as it is. The shop uses the same board to show rial prices and to charge the cart. Shipping is not part of that charge. A sourcing order is still priced by a specialist and is not paid through these gateways.
 
 ## Communication
 
@@ -136,10 +144,10 @@ A price update can also include a short message from the agent to the customer.
 
 These items exist in the product as gaps, not as working features:
 
-- There is no in-product payment. The customer confirms a quoted price; money is collected outside Sino Persia.
+- A sourcing order is still not paid inside the product. The customer confirms a quoted price, and that money is collected outside Sino Persia. Shop checkout does charge the goods total when a gateway is enabled.
 - The order "download" action does not yet produce a PDF or spreadsheet. It only tells the user that a file would be prepared.
-- Sellers cannot see or fulfil orders from Seller Centre.
-- A shop purchase request does not reserve or reduce stock.
+- A seller can see shop lines for their own products. They cannot change the order status or mark it fulfilled from Seller Centre.
+- A shop purchase does not reserve or reduce stock.
 - Scanned product catalogues cannot be imported.
 
 ## How this document stays current

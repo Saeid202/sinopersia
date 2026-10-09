@@ -4,11 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { formatShopPrice, getProductCategory, getProductTitle, type ShopProduct } from "@/lib/shop";
+import { categoryLabel, formatShopPrice, getProductTitle, type ShopCategory, type ShopProduct } from "@/lib/shop";
+import RialPrice from "@/components/RialPrice";
 import { useShopCart } from "@/components/ShopCart";
 
 export default function ShopPage() {
   const [products, setProducts] = useState<ShopProduct[]>([]);
+  const [categoryRows, setCategoryRows] = useState<ShopCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -18,14 +20,17 @@ export default function ShopPage() {
 
   useEffect(() => {
     const supabase = createClient();
-    void supabase.from("shop_products").select("*").eq("is_active", true).order("created_at", { ascending: false })
-      .then(({ data, error: queryError }) => {
-        if (queryError) {
+    void Promise.all([
+      supabase.from("shop_products").select("*").eq("is_active", true).order("created_at", { ascending: false }),
+      supabase.from("shop_categories").select("id, name_en, name_fa, sort_order").order("sort_order"),
+    ]).then(([productsResult, categoriesResult]) => {
+        if (productsResult.error) {
           setError("بارگذاری محصولات انجام نشد. لطفاً کمی بعد دوباره تلاش کنید.");
-          console.error("Failed to load shop products:", queryError);
+          console.error("Failed to load shop products:", productsResult.error);
         } else {
-          setProducts((data as ShopProduct[]) || []);
+          setProducts((productsResult.data as ShopProduct[]) || []);
         }
+        if (!categoriesResult.error) setCategoryRows((categoriesResult.data as ShopCategory[]) || []);
         setLoading(false);
       });
   }, []);
@@ -50,7 +55,7 @@ export default function ShopPage() {
           <div className="shop-hero-copy">
             <span className="shop-eyebrow">SINO PERSIA MARKETPLACE</span>
             <h1>محصولات منتخب،<br /><em>مستقیم از چین</em></h1>
-            <p>محصول موردنظرتان را پیدا کنید؛ هزینهٔ نهایی و ارسال پیش از پرداخت با شما تأیید می‌شود.</p>
+            <p>محصول را به سبد اضافه کنید. مبلغ کالا به ریال، با نرخ بازار همان لحظه، از درگاه پرداخت می‌شود. هزینهٔ ارسال جداست.</p>
             <a className="shop-primary-button" href="#shop-products">مشاهدهٔ محصولات</a>
           </div>
           <div className="shop-hero-art" aria-hidden="true">
@@ -74,7 +79,7 @@ export default function ShopPage() {
           </label>
           <label className="shop-select-label"><span>دسته‌بندی</span>
             <select value={category} onChange={(event) => setCategory(event.target.value)} aria-label="فیلتر دسته‌بندی">
-              {categories.map((item) => <option key={item} value={item}>{item === "همهٔ دسته‌ها" ? item : getProductCategory(item)}</option>)}
+              {categories.map((item) => <option key={item} value={item}>{item === "همهٔ دسته‌ها" ? item : categoryLabel(item, categoryRows)}</option>)}
             </select>
           </label>
           <label className="shop-select-label"><span>مرتب‌سازی</span>
@@ -95,11 +100,14 @@ export default function ShopPage() {
                   <span className={`shop-stock-badge ${product.stock > 0 ? "" : "is-out-of-stock"}`}>{product.stock > 0 ? "موجود" : "ناموجود"}</span>
                 </Link>
                 <div className="shop-product-info">
-                  <span className="shop-product-category">{getProductCategory(product.category)}</span>
+                  <span className="shop-product-category">{categoryLabel(product.category, categoryRows)}</span>
                   <Link href={`/shop/${product.id}`} className="shop-product-title">{getProductTitle(product)}</Link>
                   {product.sku && <span className="shop-product-sku">کد کالا: <b dir="ltr">{product.sku}</b></span>}
                   <div className="shop-product-card-bottom">
-                    <strong className="shop-product-price">{formatShopPrice(product.price, product.currency)}</strong>
+                    <div className="shop-price-stack">
+                      <strong className="shop-product-price">{formatShopPrice(product.price, product.currency)}</strong>
+                      <RialPrice price={product.price} currency={product.currency} />
+                    </div>
                     <button type="button" className="shop-add-icon" disabled={product.stock < 1} aria-label={`افزودن ${getProductTitle(product)} به سبد`} onClick={() => addProduct(product)}>
                       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
                     </button>
@@ -112,7 +120,7 @@ export default function ShopPage() {
           <div className="shop-empty-state"><span>◇</span><h3>محصولی پیدا نشد</h3><p>عبارت جست‌وجو یا فیلتر دسته‌بندی را تغییر دهید.</p></div>
         )}
       </section>
-      <aside className="shop-shipping-note"><span>✳</span><p><strong>خرید با اطمینان</strong> قیمت‌های نمایش‌داده‌شده برآورد کالا هستند؛ هزینهٔ ارسال و مبلغ نهایی پیش از پرداخت با شما هماهنگ می‌شود.</p></aside>
+      <aside className="shop-shipping-note"><span>✳</span><p><strong>خرید با اطمینان</strong> مبلغ کالا با نرخ بازار به ریال در سبد گرفته می‌شود. هزینهٔ ارسال در این پرداخت نیست.</p></aside>
     </div>
   );
 }

@@ -5,18 +5,23 @@ import Link from "next/link";
 import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { formatShopPrice, getProductCategory, getProductTitle, type ShopProduct } from "@/lib/shop";
+import { categoryLabel, formatShopPrice, getProductTitle, type ShopCategory, type ShopProduct } from "@/lib/shop";
+import RialPrice from "@/components/RialPrice";
+import { formatRial, rialAmount } from "@/lib/rial";
+import { useRateBoard } from "@/lib/use-rate-board";
 import { useShopCart } from "@/components/ShopCart";
 
 export default function ShopCartPage() {
   const router = useRouter();
   const { lines, ready, setQuantity, removeProduct, clearCart } = useShopCart();
   const [products, setProducts] = useState<ShopProduct[]>([]);
+  const [categories, setCategories] = useState<ShopCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const [gateways, setGateways] = useState<{ code: string; name: string; sandbox: boolean }[]>([]);
+  const [gatewaysReady, setGatewaysReady] = useState(false);
+  const [gatewayCode, setGatewayCode] = useState("");
 
   const loadCartProducts = useCallback(async () => {
     if (!ready) return;
@@ -27,18 +32,40 @@ export default function ShopCartPage() {
     }
     setLoading(true);
     const supabase = createClient();
-    const { data, error: queryError } = await supabase.from("shop_products").select("*").in("id", lines.map((line) => line.productId)).eq("is_active", true);
+    const [{ data, error: queryError }, categoryResult] = await Promise.all([
+      supabase.from("shop_products").select("*").in("id", lines.map((line) => line.productId)).eq("is_active", true),
+      supabase.from("shop_categories").select("id, name_en, name_fa, sort_order").order("sort_order"),
+    ]);
     if (queryError) {
       setError("بارگذاری سبد خرید انجام نشد. لطفاً صفحه را دوباره بارگذاری کنید.");
       console.error("Failed to load shop cart products:", queryError);
     } else {
       setProducts((data as ShopProduct[]) || []);
+      if (!categoryResult.error) setCategories((categoryResult.data as ShopCategory[]) || []);
     }
     setLoading(false);
   }, [lines, ready]);
 
   useEffect(() => { startTransition(() => { void loadCartProducts(); }); }, [loadCartProducts]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/payments/gateways")
+      .then((response) => response.json())
+      .then((body: { gateways?: { code: string; name: string; sandbox: boolean }[] }) => {
+        if (cancelled) return;
+        const enabled = body.gateways || [];
+        setGateways(enabled);
+        setGatewayCode((current) => enabled.some((gateway) => gateway.code === current) ? current : enabled[0]?.code || "");
+        setGatewaysReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setGatewaysReady(true);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const board = useRateBoard();
   const productById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
   const availableLines = lines.filter((line) => {
     const product = productById.get(line.productId);
@@ -53,17 +80,34 @@ export default function ShopCartPage() {
     return [...totals.entries()];
   }, [availableLines, productById]);
 
-  async function submitPurchaseRequest() {
-    setError("");
-    setNotice("");
-    const supabase = createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError) {
-      setError("بررسی ورود شما انجام نشد. لطفاً دوباره تلاش کنید.");
+  const rialTotal = board ? availableLines.reduce((sum, line) => {
+    const product = productById.get(line.productId);
+    return product ? sum + rialAmount(product.price * line.quantity, product.currency, board) : sum;
+  }, 0) : 0;
+
+  function openGateway(payment: { redirectUrl: string; redirectMethod: "GET" | "POST"; redirectFields?: Record<string, string> }) {
+    if (payment.redirectMethod === "GET") {
+      window.location.assign(payment.redirectUrl);
       return;
     }
-    if (!user) {
-      router.push("/login?next=%2Fshop%2Fcart");
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = payment.redirectUrl;
+    for (const [name, value] of Object.entries(payment.redirectFields || {})) {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    }
+    document.body.appendChild(form);
+    form.submit();
+  }
+
+  async function payForCart() {
+    setError("");
+    if (!gatewayCode) {
+      setError("درگاه فعالی برای پرداخت نیست. مدیر باید یک درگاه را فعال کند.");
       return;
     }
     if (availableLines.length !== lines.length) {
@@ -81,61 +125,26 @@ export default function ShopCartPage() {
     }
 
     setSubmitting(true);
-    const title = `درخواست خرید فروشگاه · ${availableLines.length} قلم`;
-    const estimatedDetails = availableLines.map((line) => {
-      const product = productById.get(line.productId)!;
-      return `${getProductTitle(product)} × ${line.quantity} — برآورد کالا: ${formatShopPrice(product.price * line.quantity, product.currency)}`;
+    const response = await fetch("/api/shop/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        gatewayCode,
+        lines: availableLines.map((line) => ({ productId: line.productId, quantity: line.quantity })),
+      }),
     });
-    const notes = [
-      "ثبت درخواست خرید از فروشگاه ساینو پرشیا.",
-      ...estimatedDetails,
-      "قیمت کالاها برآوردی است؛ هزینهٔ حمل و مبلغ نهایی باید پیش از پرداخت با مشتری تأیید شود.",
-    ].join("\n");
-    const { data: order, error: orderError } = await supabase.from("orders").insert({
-      user_id: user.id,
-      title,
-      title_en: `Shop purchase request · ${availableLines.length} items`,
-      category: "فروشگاه",
-      quantity: availableLines.reduce((sum, line) => sum + line.quantity, 0),
-      notes,
-      sample_request: false,
-    }).select("id").single();
-    if (orderError) {
-      setError(`ثبت درخواست انجام نشد: ${orderError.message}`);
+    const body = await response.json().catch(() => null) as { error?: string; redirectUrl?: string; redirectMethod?: "GET" | "POST"; redirectFields?: Record<string, string> } | null;
+    if (response.status === 401) {
+      router.push("/login?next=%2Fshop%2Fcart");
+      return;
+    }
+    if (!response.ok || !body?.redirectUrl || !body.redirectMethod) {
+      setError(body?.error || "اتصال به درگاه انجام نشد.");
       setSubmitting(false);
       return;
     }
-
-    const orderProducts = availableLines.map((line) => {
-      const product = productById.get(line.productId)!;
-      return {
-        order_id: order.id,
-        link: null,
-        description: `${getProductTitle(product)} | شناسه: ${product.id} | تعداد: ${line.quantity} | قیمت واحد: ${formatShopPrice(product.price, product.currency)}`,
-        part_number: product.sku,
-      };
-    });
-    const { error: itemsError } = await supabase.from("order_products").insert(orderProducts);
-    if (itemsError) {
-      console.error("Shop request was saved but its order product rows were not:", itemsError);
-      clearCart();
-      setSubmitted(true);
-      setNotice(`درخواست خرید شما ثبت شد و جزئیات کامل اقلام در توضیحات سفارش ذخیره شده است؛ اما ذخیرهٔ ردیف‌های جداگانه با خطا روبه‌رو شد (${itemsError.message}). کارشناس ما هزینهٔ نهایی و ارسال را پیش از پرداخت با شما هماهنگ می‌کند.`);
-      setSubmitting(false);
-      return;
-    }
-
     clearCart();
-    setSubmitted(true);
-    setNotice("درخواست خرید شما ثبت شد. کارشناس ما هزینهٔ نهایی و ارسال را پیش از پرداخت با شما هماهنگ می‌کند.");
-    setSubmitting(false);
-  }
-
-  if (submitted) {
-    return <section className="shop-container shop-request-success" role="status">
-      <span>✓</span><h1>درخواست شما ثبت شد</h1><p>{notice}</p>
-      <div><Link className="shop-primary-button" href="/dashboard">پیگیری در پنل کاربری</Link><Link className="shop-secondary-button" href="/shop">ادامهٔ خرید</Link></div>
-    </section>;
+    openGateway({ redirectUrl: body.redirectUrl, redirectMethod: body.redirectMethod, redirectFields: body.redirectFields });
   }
 
   return (
@@ -143,7 +152,6 @@ export default function ShopCartPage() {
       <nav className="shop-breadcrumb" aria-label="مسیر صفحه"><Link href="/shop">فروشگاه</Link><span>/</span><span>سبد خرید</span></nav>
       <div className="shop-section-heading"><div><span className="shop-eyebrow">بازبینی سفارش</span><h1>سبد خرید شما</h1></div><span className="shop-result-count">{lines.reduce((sum, line) => sum + line.quantity, 0)} کالا</span></div>
       {error && <div className="shop-message shop-error" role="alert">{error}</div>}
-      {notice && <div className="shop-message shop-success" role="status">{notice}</div>}
       {loading ? <div className="shop-detail-loading" aria-live="polite">در حال بارگذاری سبد خرید…</div> : lines.length === 0 ? (
         <div className="shop-empty-state"><span>◇</span><h2>سبد خرید شما خالی است</h2><p>محصولات فروشگاه را ببینید و کالاهای دلخواهتان را به سبد اضافه کنید.</p><Link className="shop-primary-button" href="/shop">رفتن به فروشگاه</Link></div>
       ) : (
@@ -160,25 +168,42 @@ export default function ShopCartPage() {
                 <Link className="shop-cart-image" href={`/shop/${product.id}`}>
                   {product.image_url ? <Image src={product.image_url} alt={getProductTitle(product)} fill sizes="96px" unoptimized /> : <span className="shop-image-placeholder">SP</span>}
                 </Link>
-                <div className="shop-cart-product"><Link href={`/shop/${product.id}`}>{getProductTitle(product)}</Link><span>{formatShopPrice(product.price, product.currency)} · {getProductCategory(product.category)}</span>{overStock && <small className="shop-stock-warning">فقط {product.stock} عدد موجود است.</small>}</div>
+                <div className="shop-cart-product"><Link href={`/shop/${product.id}`}>{getProductTitle(product)}</Link><span>{formatShopPrice(product.price, product.currency)} · {categoryLabel(product.category, categories)}</span>{overStock && <small className="shop-stock-warning">فقط {product.stock} عدد موجود است.</small>}</div>
                 <div className="shop-cart-item-actions">
                   <div className="shop-quantity-control">
                     <button type="button" aria-label="افزایش تعداد" disabled={line.quantity >= product.stock} onClick={() => setQuantity(product.id, Math.min(product.stock, line.quantity + 1))}>+</button>
                     <span>{line.quantity}</span>
                     <button type="button" aria-label="کاهش تعداد" disabled={line.quantity <= 1} onClick={() => setQuantity(product.id, line.quantity - 1)}>−</button>
                   </div>
-                  <strong>{formatShopPrice(product.price * line.quantity, product.currency)}</strong>
+                  <div className="shop-price-stack">
+                    <strong>{formatShopPrice(product.price * line.quantity, product.currency)}</strong>
+                    <RialPrice price={product.price} currency={product.currency} quantity={line.quantity} />
+                  </div>
                   <button type="button" className="shop-remove-item" onClick={() => removeProduct(product.id)}>حذف</button>
                 </div>
               </article>;
             })}
           </div>
           <aside className="shop-cart-summary">
-            <h2>خلاصهٔ درخواست</h2>
-            <div className="shop-summary-lines">{estimatedTotals.map(([currency, total]) => <p key={currency}><span>برآورد قیمت کالاها</span><strong>{formatShopPrice(total, currency)}</strong></p>)}</div>
-            <div className="shop-shipping-disclaimer"><span>i</span><p>هزینهٔ ارسال در این مبلغ نیست. قیمت نهایی پس از بررسی و پیش از پرداخت به شما اعلام می‌شود.</p></div>
-            <button type="button" className="shop-primary-button shop-submit-request" disabled={submitting || loading || availableLines.length === 0 || availableLines.length !== lines.length} onClick={() => void submitPurchaseRequest()}>
-              {submitting ? "در حال ثبت درخواست…" : "ثبت درخواست خرید"}
+            <h2>پرداخت</h2>
+            <div className="shop-summary-lines">
+              {estimatedTotals.map(([currency, total]) => <p key={currency}><span>قیمت کالاها</span><strong>{formatShopPrice(total, currency)}</strong></p>)}
+              {board && <p><span>مبلغ قابل پرداخت</span><strong className="shop-rial-total">{formatRial(rialTotal)}</strong></p>}
+            </div>
+            <div className="shop-gateways" role="radiogroup" aria-label="درگاه پرداخت">
+              {!gatewaysReady && <p className="shop-gateway-empty">در حال بررسی درگاه‌ها…</p>}
+              {gatewaysReady && gateways.length === 0 && <p className="shop-gateway-empty">درگاه فعالی نیست. مدیر باید زرین‌پال یا بانک ملت را در پنل فعال کند و کلیدها را وارد کند.</p>}
+              {gateways.map((gateway) => (
+                <label className={gateway.code === gatewayCode ? "shop-gateway is-selected" : "shop-gateway"} key={gateway.code}>
+                  <input type="radio" name="gateway" value={gateway.code} checked={gateway.code === gatewayCode} onChange={() => setGatewayCode(gateway.code)} />
+                  <span>{gateway.name}</span>
+                  {gateway.sandbox && <small>آزمایشی</small>}
+                </label>
+              ))}
+            </div>
+            <div className="shop-shipping-disclaimer"><span>i</span><p>مبلغ کالا با نرخ بازار همین لحظه به ریال حساب می‌شود و همان رقم به درگاه می‌رود. هزینهٔ ارسال در این پرداخت نیست.</p></div>
+            <button type="button" className="shop-primary-button shop-submit-request" disabled={submitting || loading || !board || !gatewayCode || availableLines.length === 0 || availableLines.length !== lines.length} onClick={() => void payForCart()}>
+              {submitting ? "در حال اتصال به درگاه…" : board ? "پرداخت" : "در حال گرفتن نرخ بازار…"}
             </button>
             <Link className="shop-continue-link" href="/shop">ادامهٔ خرید</Link>
           </aside>

@@ -1,13 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import BrandLogo from "@/components/BrandLogo";
+
+const NAV_ITEMS = [
+  { href: "/admin", label: "مدیریت سایت", icon: "⚙" },
+  { href: "/admin/products", label: "مدیریت محصولات", icon: "▣" },
+];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
   const router = useRouter();
+  const pathname = usePathname();
   const [name, setName] = useState("مدیر سیستم");
   const [email, setEmail] = useState("");
 
@@ -30,7 +37,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside className="sidebar">
         <BrandLogo className="sidebar-logo" priority />
         <nav className="nav">
-          <a className="active" href="/admin"><span className="nav-icon">⚙</span> مدیریت سایت</a>
+          {NAV_ITEMS.map((item) => (
+            <Link key={item.href} href={item.href} className={pathname === item.href ? "active" : ""}>
+              <span className="nav-icon">{item.icon}</span> {item.label}
+            </Link>
+          ))}
         </nav>
         <div className="sidebar-footer">
           <div className="user-info">

@@ -12,7 +12,7 @@ export default function OrderCard({
 }: {
   order: Order;
   onView: () => void;
-  onEdit: () => void;
+  onEdit?: () => void;
   onDeleted: () => void;
 }) {
   const supabase = createClient();
@@ -70,7 +70,7 @@ export default function OrderCard({
         </div>
         <div className="order-actions">
           <button className="btn-view" onClick={(e) => { e.stopPropagation(); onView(); }}>دیدن</button>
-          <button className="btn-edit" onClick={(e) => { e.stopPropagation(); onEdit(); }}>ویرایش</button>
+          {onEdit && <button className="btn-edit" onClick={(e) => { e.stopPropagation(); onEdit(); }}>ویرایش</button>}
           <button className="btn-download" onClick={(e) => { e.stopPropagation(); handleDownload(); }}>دانلود</button>
           <button className="btn-delete" onClick={(e) => { e.stopPropagation(); handleDelete(); }}>حذف</button>
           <div className="order-arrow" style={{ transform: open ? "rotate(180deg)" : undefined }}>▼</div>

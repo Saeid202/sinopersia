@@ -38,7 +38,7 @@ export default function AgentQueuePage() {
       setLoading(false);
       return;
     }
-    const orderRows = (data as Order[]) || [];
+    const orderRows = ((data as Order[]) || []).filter((order) => order.category !== "فروشگاه");
     const userIds = [...new Set(orderRows.map((order) => order.user_id))];
     const orderIds = orderRows.map((order) => order.id);
     const [{ data: profileData }, { data: reads }, { data: incomingMessages }] = await Promise.all([

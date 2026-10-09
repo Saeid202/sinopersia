@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import BrandLogo from "@/components/BrandLogo";
+import ExchangeRates from "@/components/ExchangeRates";
 import { createContext, startTransition, useContext, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -103,14 +104,20 @@ export function ShopHeader() {
   const pathname = usePathname();
 
   return (
-    <header className="shop-header">
+    <>
+      <ExchangeRates />
+      <header className="shop-header">
       <div className="shop-header-inner">
         <Link className="shop-brand-link" href="/" aria-label="بازگشت به ساینو پرشیا">
           <BrandLogo className="shop-brand-logo" priority />
         </Link>
         <nav className="shop-nav" aria-label="ناوبری فروشگاه">
           <Link href="/shop" aria-current={pathname === "/shop" ? "page" : undefined}>فروشگاه</Link>
-          <Link href="/">خدمات ما</Link>
+          <Link href="/#process">فرآیند</Link>
+          <Link href="/#consolidation">تجمیع</Link>
+          <Link href="/#benefits">چرا ما</Link>
+          <Link href="/#suitable">مناسب شما</Link>
+          <Link href="/contact">تماس با ما</Link>
         </nav>
         <Link className="shop-cart-link" href="/shop/cart" aria-label={`سبد خرید، ${itemCount} کالا`}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.2 11.1a2 2 0 0 0 2 1.6h8.4a2 2 0 0 0 1.9-1.4L21 8H6" /><circle cx="10" cy="20" r="1" /><circle cx="18" cy="20" r="1" /></svg>
@@ -118,5 +125,6 @@ export function ShopHeader() {
         </Link>
       </div>
     </header>
+    </>
   );
 }

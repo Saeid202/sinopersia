@@ -4,7 +4,18 @@ import Image from "next/image";
 import { startTransition, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { FALLBACK_SHOP_CATEGORIES, type ShopCategory } from "@/lib/shop";
 import { useSellerLocale } from "@/components/SellerCentreShell";
+
+async function snapshotProductRates(body: { productIds?: string[]; missingOnly?: boolean }) {
+  const response = await fetch("/api/seller-centre/product-fx", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({})) as { error?: string };
+  if (!response.ok) throw new Error(payload.error || "ثبت نرخ ریالی انجام نشد.");
+}
 
 type ShopSeller = { id: string; store_name: string };
 type ShopProduct = {
@@ -22,6 +33,7 @@ type ShopProduct = {
   image_url: string | null;
   is_active: boolean;
   created_at: string;
+  price_irr?: number | null;
 };
 
 type ProductImport = {
@@ -79,24 +91,13 @@ const emptyDraft = (): ProductDraft => ({
   is_active: true,
 });
 
-const PRODUCT_CATEGORIES: { value: string; en: string; fa: string }[] = [
-  { value: "Electronics", en: "Electronics", fa: "لوازم الکترونیکی" },
-  { value: "Industrial Parts", en: "Industrial Parts", fa: "قطعات صنعتی" },
-  { value: "Auto Parts", en: "Auto Parts", fa: "قطعات خودرو" },
-  { value: "Construction Equipment", en: "Construction Equipment", fa: "تجهیزات ساختمانی" },
-  { value: "Raw Materials", en: "Raw Materials", fa: "مواد اولیه" },
-  { value: "Machinery", en: "Machinery", fa: "ماشین‌آلات" },
-  { value: "Home Appliances", en: "Home Appliances", fa: "لوازم خانگی" },
-  { value: "Clothing & Textiles", en: "Clothing & Textiles", fa: "پوشاک و نساجی" },
-  { value: "Other", en: "Other", fa: "سایر" },
-];
-
 export default function SellerProductsPage() {
   const [supabase] = useState(() => createClient());
   const router = useRouter();
   const { language, t } = useSellerLocale();
   const [seller, setSeller] = useState<ShopSeller | null>(null);
   const [products, setProducts] = useState<ShopProduct[]>([]);
+  const [categories, setCategories] = useState<ShopCategory[]>(FALLBACK_SHOP_CATEGORIES);
   const [productImports, setProductImports] = useState<ProductImport[]>([]);
   const [activeImport, setActiveImport] = useState<ProductImport | null>(null);
   const [importItems, setImportItems] = useState<ProductImportItem[]>([]);
@@ -104,7 +105,6 @@ export default function SellerProductsPage() {
   const [draft, setDraft] = useState<ProductDraft>(emptyDraft);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -122,10 +122,12 @@ export default function SellerProductsPage() {
       { data: sellerData, error: sellerError },
       { data: productData, error: productError },
       { data: importData, error: importErrorResult },
+      { data: categoryData, error: categoryError },
     ] = await Promise.all([
       supabase.from("shop_sellers").select("id,store_name").eq("id", user.id).maybeSingle(),
       supabase.from("shop_products").select("*").eq("seller_id", user.id).order("created_at", { ascending: false }),
       supabase.from("shop_product_imports").select("id,source_filename,status,page_count,item_count,created_at").eq("seller_id", user.id).eq("status", "needs_review").order("created_at", { ascending: false }),
+      supabase.from("shop_categories").select("id, name_en, name_fa, sort_order").order("sort_order"),
     ]);
     if (sellerError || !sellerData) {
       setError(sellerError?.message || t("sellerOnly"));
@@ -134,10 +136,15 @@ export default function SellerProductsPage() {
     }
     if (productError) setError(productError.message);
     if (importErrorResult) setImportError(importErrorResult.message);
+    if (!categoryError && categoryData) setCategories(categoryData as ShopCategory[]);
     setSeller(sellerData as ShopSeller);
-    setProducts((productData as ShopProduct[]) || []);
+    const rows = (productData as ShopProduct[]) || [];
+    setProducts(rows);
     setProductImports((importData as ProductImport[]) || []);
     setLoading(false);
+    if (rows.some((product) => "price_irr" in product && product.price_irr == null)) {
+      void snapshotProductRates({ missingOnly: true }).catch(() => undefined);
+    }
   }, [router, supabase, t]);
 
   useEffect(() => { startTransition(() => { void loadSellerCentre(); }); }, [loadSellerCentre]);
@@ -149,15 +156,21 @@ export default function SellerProductsPage() {
     setError("");
   }
 
+  function focusProductForm() {
+    requestAnimationFrame(() => {
+      document.getElementById("seller-manual-product")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   function openAddForm() {
     resetDraft();
     setNotice("");
-    setShowForm(true);
+    focusProductForm();
   }
 
   function closeForm() {
-    setShowForm(false);
     resetDraft();
+    setNotice("");
   }
 
   function editProduct(product: ShopProduct) {
@@ -178,7 +191,7 @@ export default function SellerProductsPage() {
     setEditingProductId(product.id);
     setError("");
     setNotice("");
-    setShowForm(true);
+    focusProductForm();
   }
 
   async function saveProduct(event: React.FormEvent<HTMLFormElement>) {
@@ -220,17 +233,22 @@ export default function SellerProductsPage() {
       is_active: draft.is_active,
     };
     const result = editingProductId
-      ? await supabase.from("shop_products").update(payload).eq("id", editingProductId).eq("seller_id", seller.id)
-      : await supabase.from("shop_products").insert(payload);
-    if (result.error) {
-      setError(`${t("saveError")} ${result.error.message}`);
+      ? await supabase.from("shop_products").update(payload).eq("id", editingProductId).eq("seller_id", seller.id).select("id").single()
+      : await supabase.from("shop_products").insert(payload).select("id").single();
+    if (result.error || !result.data) {
+      setError(`${t("saveError")} ${result.error?.message || ""}`);
       setSaving(false);
       return;
     }
-    setShowForm(false);
+    let savedNotice = t("productSaved");
+    try {
+      await snapshotProductRates({ productIds: [result.data.id] });
+    } catch (fxError) {
+      savedNotice = `${savedNotice} ${fxError instanceof Error ? fxError.message : ""}`;
+    }
     resetDraft();
     setSaving(false);
-    setNotice(t("productSaved"));
+    setNotice(savedNotice);
     await loadSellerCentre();
   }
 
@@ -358,6 +376,15 @@ export default function SellerProductsPage() {
     setActiveImport(null);
     setImportItems([]);
     setReviewing(false);
+    try {
+      await snapshotProductRates({ missingOnly: true });
+    } catch {
+      setImportNotice(language === "fa"
+        ? "محصولات منتشر شدند، اما نرخ ریالی‌شان هنوز ثبت نشده است."
+        : "Products were published, but the rial rate was not stored.");
+      await loadSellerCentre();
+      return;
+    }
     setImportNotice(language === "fa" ? "محصولات انتخاب‌شده با موفقیت منتشر شدند." : "The selected products were published.");
     await loadSellerCentre();
   }
@@ -476,6 +503,45 @@ export default function SellerProductsPage() {
         )}
       </section>
 
+      <section className="seller-manual-product-panel" id="seller-manual-product">
+        <div className="seller-product-import-copy">
+          <p className="seller-eyebrow">{editingProductId ? t("editProduct") : (language === "fa" ? "ثبت محصول با فرم" : "Add a product with a form")}</p>
+          <p>{editingProductId ? t("editProductSubtitle") : (language === "fa" ? "اطلاعات یک کالا را اینجا وارد کنید تا مستقیم در فروشگاه شما ثبت شود." : "Enter one product here to list it directly in your store.")}</p>
+        </div>
+        <form className="seller-product-form seller-manual-product-form" onSubmit={saveProduct}>
+          <label>{t("category")}
+            <select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} required>
+              <option value="" disabled>{t("selectCategory")}</option>
+              {draft.category && !categories.some((item) => item.name_en === draft.category) && (
+                <option value={draft.category}>{draft.category}</option>
+              )}
+              {categories.map((item) => (
+                <option key={item.id} value={item.name_en}>{language === "fa" ? item.name_fa : item.name_en}</option>
+              ))}
+            </select>
+          </label>
+          <label>{t("sku")}<input value={draft.sku} onChange={(event) => setDraft({ ...draft, sku: event.target.value })} maxLength={80} /></label>
+          <label>{t("nameEn")}<input value={draft.title_en} onChange={(event) => setDraft({ ...draft, title_en: event.target.value })} required maxLength={160} /></label>
+          <label>{t("nameFa")}<input dir="rtl" value={draft.title_fa} onChange={(event) => setDraft({ ...draft, title_fa: event.target.value })} maxLength={160} /></label>
+          <label>{t("descriptionEn")}<textarea value={draft.description_en} onChange={(event) => setDraft({ ...draft, description_en: event.target.value })} rows={3} /></label>
+          <label>{t("descriptionFa")}<textarea dir="rtl" value={draft.description_fa} onChange={(event) => setDraft({ ...draft, description_fa: event.target.value })} rows={3} /></label>
+          <label>{t("price")}<input type="number" min="0.01" step="0.01" value={draft.price} onChange={(event) => setDraft({ ...draft, price: event.target.value })} required /></label>
+          <label>{t("currency")}<select value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value as ProductDraft["currency"] })}><option value="CNY">CNY</option><option value="USD">USD</option></select></label>
+          <label>{t("stock")}<input type="number" min={0} step={1} value={draft.stock} onChange={(event) => setDraft({ ...draft, stock: event.target.value })} required /></label>
+          <label className="seller-manual-image">{t("image")}<input type="file" accept="image/*" onChange={(event) => setImageFile(event.target.files?.[0] || null)} /></label>
+          {(draft.image_url && !imageFile) || imageFile ? (
+            <div className="seller-manual-image-preview is-wide">
+              {draft.image_url && !imageFile && <Image className="seller-form-image-preview" src={draft.image_url} alt={draft.title_en || ""} width={120} height={120} unoptimized />}
+              {imageFile && <p className="seller-file-name">{imageFile.name}</p>}
+            </div>
+          ) : null}
+          <div className="seller-form-actions is-wide">
+            <button type="submit" className="seller-primary-button" disabled={saving}>{saving ? t("saving") : editingProductId ? t("save") : t("addProduct")}</button>
+            {editingProductId && <button type="button" className="seller-secondary-button" onClick={closeForm}>{t("cancel")}</button>}
+          </div>
+        </form>
+      </section>
+
       <div className="seller-stat-row">
         <article className="seller-stat"><span>{t("productCount")}</span><strong>{products.length}</strong></article>
         <article className="seller-stat"><span>{t("activeCount")}</span><strong>{activeCount}</strong></article>
@@ -552,7 +618,7 @@ export default function SellerProductsPage() {
                       <label>{pdfCopy.nameFa}<input dir="rtl" value={item.title_fa || ""} maxLength={160} onChange={(event) => setImportItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, title_fa: event.target.value } : entry))} /></label>
                       <label>{pdfCopy.category}
                         <select value={item.category} onChange={(event) => setImportItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, category: event.target.value } : entry))}>
-                          {PRODUCT_CATEGORIES.map((category) => <option key={category.value} value={category.value}>{language === "fa" ? category.fa : category.en}</option>)}
+                          {categories.map((category) => <option key={category.id} value={category.name_en}>{language === "fa" ? category.name_fa : category.name_en}</option>)}
                         </select>
                       </label>
                       <label>{pdfCopy.sku}<input value={item.sku || ""} maxLength={80} onChange={(event) => setImportItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, sku: event.target.value } : entry))} /></label>
@@ -581,52 +647,6 @@ export default function SellerProductsPage() {
         </div>
       )}
 
-      {showForm && (
-        <div className="seller-modal-backdrop" role="presentation" onClick={closeForm}>
-          <section className="seller-modal seller-product-form-panel" id="seller-product-form" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-            <div className="seller-section-heading">
-              <div>
-                <p className="seller-eyebrow">{t("productListing").toUpperCase()}</p>
-                <h2>{editingProductId ? t("editProduct") : t("addProduct")}</h2>
-                <p className="seller-modal-subtitle">{editingProductId ? t("editProductSubtitle") : t("addProductSubtitle")}</p>
-              </div>
-              <button type="button" className="seller-icon-action seller-modal-close" title={t("close")} aria-label={t("close")} onClick={closeForm}>×</button>
-            </div>
-            <form className="seller-product-form" onSubmit={saveProduct}>
-              <label>{t("category")}
-                <select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} required>
-                  <option value="" disabled>{t("selectCategory")}</option>
-                  {draft.category && !PRODUCT_CATEGORIES.some((item) => item.value === draft.category) && (
-                    <option value={draft.category}>{draft.category}</option>
-                  )}
-                  {PRODUCT_CATEGORIES.map((item) => (
-                    <option key={item.value} value={item.value}>{language === "fa" ? item.fa : item.en}</option>
-                  ))}
-                </select>
-              </label>
-              <label>{t("nameEn")}<input value={draft.title_en} onChange={(event) => setDraft({ ...draft, title_en: event.target.value })} required maxLength={160} /></label>
-              <label>{t("nameFa")}<input dir="rtl" value={draft.title_fa} onChange={(event) => setDraft({ ...draft, title_fa: event.target.value })} maxLength={160} /></label>
-              <label>{t("descriptionEn")}<textarea value={draft.description_en} onChange={(event) => setDraft({ ...draft, description_en: event.target.value })} rows={3} /></label>
-              <label>{t("descriptionFa")}<textarea dir="rtl" value={draft.description_fa} onChange={(event) => setDraft({ ...draft, description_fa: event.target.value })} rows={3} /></label>
-              <div className="seller-form-grid">
-                <label>{t("sku")}<input value={draft.sku} onChange={(event) => setDraft({ ...draft, sku: event.target.value })} maxLength={80} /></label>
-                <label>{t("stock")}<input type="number" min={0} step={1} value={draft.stock} onChange={(event) => setDraft({ ...draft, stock: event.target.value })} required /></label>
-              </div>
-              <div className="seller-form-grid">
-                <label>{t("price")}<input type="number" min="0.01" step="0.01" value={draft.price} onChange={(event) => setDraft({ ...draft, price: event.target.value })} required /></label>
-                <label>{t("currency")}<select value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value as ProductDraft["currency"] })}><option value="CNY">CNY</option><option value="USD">USD</option></select></label>
-              </div>
-              <label>{t("image")}<input type="file" accept="image/*" onChange={(event) => setImageFile(event.target.files?.[0] || null)} /></label>
-              {draft.image_url && !imageFile && <Image className="seller-form-image-preview" src={draft.image_url} alt={draft.title_en} width={120} height={120} unoptimized />}
-              {imageFile && <p className="seller-file-name">{imageFile.name}</p>}
-              <div className="seller-form-actions">
-                <button type="submit" className="seller-primary-button" disabled={saving}>{saving ? t("saving") : t("save")}</button>
-                <button type="button" className="seller-secondary-button" onClick={closeForm}>{t("cancel")}</button>
-              </div>
-            </form>
-          </section>
-        </div>
-      )}
     </div>
   );
 }

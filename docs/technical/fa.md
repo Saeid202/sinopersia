@@ -1,6 +1,6 @@
 # ساینو پرشیا — سند فنی
 
-آخرین به‌روزرسانی: ۱۴ مهر ۱۴۰۵ (۶ اکتبر ۲۰۲۶)
+آخرین به‌روزرسانی: ۱۷ مهر ۱۴۰۵ (۹ اکتبر ۲۰۲۶)
 
 این سند برای کسی است که می‌خواهد کد را عوض کند. کد و پروژهٔ Supabase را همان‌طور که در این مخزن هستند شرح می‌دهد. معنی محصول برای مشتری و کارکنان در `docs/business/fa.md` است.
 
@@ -14,7 +14,7 @@
 | متن PDF | `pdfjs-dist` نسخهٔ ۴٫۱۰٫۳۸، بیلد قدیمی `pdfjs-dist/legacy/build/pdf.mjs` |
 | نام مستعار مسیر | `@/*` به `src/*` |
 
-بک‌اند جدا وجود ندارد. مرورگر با کلید anon به Supabase وصل می‌شود. دو Route Handler روی سرور Next.js اجرا می‌شوند. کنترل اصلی دسترسی Row Level Security است؛ `src/proxy.ts` فقط افراد را به بخش درست می‌فرستد.
+بک‌اند جدا وجود ندارد. مرورگر با کلید anon به Supabase وصل می‌شود. Route Handlerها روی سرور Next.js اجرا می‌شوند. کنترل اصلی دسترسی Row Level Security است؛ `src/proxy.ts` فقط افراد را به بخش درست می‌فرستد.
 
 اسکریپت‌های `package.json`:
 
@@ -64,15 +64,23 @@ docs/technical/          همین سند
 | مسیر | چه کسی وارد می‌شود |
 | --- | --- |
 | `/` | صفحهٔ اصلی، عمومی |
-| `/shop`، `/shop/[productId]`، `/shop/cart` | عمومی. ثبت درخواست خرید به مشتری واردشده نیاز دارد. |
+| `/contact` | عمومی. یک ردیف در `contact_messages` ذخیره می‌کند. |
+| `/shop`، `/shop/[productId]`، `/shop/cart` | عمومی. پرداخت سبد به مشتری واردشده نیاز دارد. |
+| `/payment/result` | عمومی. بعد از تأیید، بازگشت بانک به این صفحه می‌رسد. |
+| `/api/shop/checkout` | مشتری واردشده. مبلغ ریال را حساب می‌کند و تراکنش درگاه را شروع می‌کند. |
+| `/api/payments/gateways` | عمومی. فقط درگاه‌های فعال: کد، نام، و اینکه سندباکس روشن است یا نه. بدون کلید. |
+| `/api/payments/callback/[gateway]` | عمومی. بانک این را صدا می‌زند. پشت پروکسی نیست. |
 | `/login`، `/reset-password` | ورود عمومی |
 | `/dashboard`، `/dashboard/messages`، `/dashboard/profile` | `customer` واردشده. نقش‌های دیگر به بخش خودشان می‌روند. |
 | `/agent` | `agent` واردشده |
 | `/admin` | `admin` واردشده |
+| `/admin/products` | `admin` واردشده. فهرست دسته‌بندی و همهٔ محصول‌های فروشگاه. |
 | `/api/admin/agents` | `admin` واردشده. دیگران JSON با وضعیت ۴۰۳ می‌گیرند. |
+| `/api/rates` | عمومی. نرخ لحظه‌ای دلار و یوان به ریال. |
 | `/seller-centre/login`، `/seller-centre/register` | عمومی. فروشنده‌ای که ردیف `shop_sellers` دارد به `/seller-centre` می‌رود. |
 | `/seller-centre`، `/products`، `/orders`، `/settings` | `seller` واردشده که ردیف `shop_sellers` هم دارد. وگرنه `/seller-centre/login` یا `/seller-centre/register`. |
 | `/api/seller-centre/product-imports` | در matcher پروکسی نیست. خود مسیر، نشست و `shop_sellers` را چک می‌کند. |
+| `/api/seller-centre/product-fx` | فروشندهٔ واردشده. نرخ ریالی لحظهٔ ذخیره را روی محصول می‌نویسد. |
 
 بعد از ورود با رمز، `AuthCard` اگر `?next=` یک مسیر همان‌سایت باشد که با یک `/` شروع شود، همان را باز می‌کند. بدون آن، مقصد از روی `profiles.role` یکی از `/admin`، `/agent`، `/seller-centre` یا `/dashboard` است.
 
@@ -123,6 +131,11 @@ where email = 'their-email@example.com';
 ۴. `agent-role.sql` — تخصیص ایجنت، خوانده‌شدن گفتگو، realtime، و قفل نقش
 ۵. `seller-centre.sql` — جدول‌های فروشگاه، نقش فروشنده، عکس محصول
 ۶. `product-pdf-imports.sql` — جدول‌های ورود PDF، باکت خصوصی PDF، و تابع تأیید و رد
+۷. `contact-messages.sql` — فرم تماس عمومی، و خواندن و علامت خوانده‌شدن برای ادمین. بعد از `agent-role.sql`
+۸. `seller-orders.sql` — ستون‌های قلم فروشگاه روی `order_products` و تابع `seller_shop_order_lines()`. بعد از `seller-centre.sql`
+۹. `payment-gateways.sql` — تنظیم درگاه، تراکنش‌ها، و `next_payment_order_id()`
+۱۰. `product-rial.sql` — ستون‌های ذخیرهٔ ریال و `apply_shop_product_rial()`. بعد از `seller-centre.sql`
+۱۱. `shop-categories.sql` — فهرست دسته‌بندی فروشگاه، و دسترسی ادمین به همهٔ محصول‌ها و نام فروشگاه. بعد از `agent-role.sql` و `seller-centre.sql`
 
 پیش از استفاده از `/admin` باید یک پروفایل موجود را دستی ارتقا داد:
 
@@ -136,7 +149,11 @@ update public.profiles set role = 'admin' where email = 'admin@example.com';
 
 `shop_sellers` — یک ردیف برای هر فروشنده. `id` برابر `auth.users.id` است و `store_name` اجباری است.
 
-`shop_products` — ردیف کاتالوگ. `price > 0`، ارز `CNY` یا `USD`، `stock >= 0`، و `is_active` پیش‌فرض true. تریگر `updated_at` را تازه می‌کند.
+`shop_categories` — فهرست دسته‌بندی. `name_en` و `name_fa` هر دو لازم و یکتا هستند. `shop_products.category` همان `name_en` را نگه می‌دارد. `supabase/shop-categories.sql` یک بار در SQL Editor اجرا شود. عوض کردن `name_en` محصول‌هایی را که نام قبلی را دارند بازنویسی می‌کند. دسته‌ای که هنوز محصول دارد حذف نمی‌شود. تا وقتی آن فایل اجرا نشده، فرم فروشنده همان فهرست ثابت قبلی را نشان می‌دهد.
+
+`contact_messages` — یک پیام تماس عمومی. `status` برابر `جدید` یا `خوانده‌شده` است. هر کس، واردشده یا نه، می‌تواند ردیفی با وضعیت `جدید` درج کند. فقط ادمین ردیف‌ها را می‌خواند یا وضعیت را خوانده‌شده می‌کند. `supabase/contact-messages.sql` یک بار اجرا شود.
+
+`shop_products` — ردیف کاتالوگ. `price > 0`، ارز `CNY` یا `USD`، `stock >= 0`، و `is_active` پیش‌فرض true. تریگر `updated_at` را تازه می‌کند. `fx_rate_irr`، `price_irr` و `fx_quoted_at` تبدیل بازار را در لحظهٔ ذخیرهٔ محصول نگه می‌دارند. `POST /api/seller-centre/product-fx` تابلوی جاری را یک بار می‌خواند و ردیف‌های انتخاب‌شده را در یک فراخوانی پایگاه می‌نویسد. پیش از آن باید `supabase/product-rial.sql` یک بار در SQL Editor اجرا شود.
 
 `shop_product_imports` — یک PDF بارگذاری‌شده. `status` برابر `needs_review` یا `completed` است.
 
@@ -154,7 +171,7 @@ update public.profiles set role = 'admin' where email = 'admin@example.com';
 
 - `profiles` — `id`، `full_name`، `phone`، `address`، `postal_code`، `email`، `role`
 - `orders` — `id`، `order_number`، `user_id`، `title`، `title_en`، `category`، `part_number`، `assigned_agent_id`، `quantity`، `unit`، `deadline`، `budget`، `shipping_type`، `sample_request`، `notes`، `price`، `status`، `created_at`
-- `order_products` — `id`، `order_id`، `link`، `description`، `part_number`
+- `order_products` — `id`، `order_id`، `link`، `description`، `part_number`. `seller-orders.sql` همچنین `shop_product_id`، `quantity`، `unit_price` و `currency` را اضافه می‌کند تا قلم فروشگاه به محصول فروشنده وصل شود.
 - `order_comments` — ردیف گفتگو با `author_type` برابر `customer` یا `agent`
 - `agent_messages` — یادداشت اختیاری که هنگام ذخیرهٔ قیمت ایجنت ثبت می‌شود
 - `tickets` و `ticket_replies`
@@ -171,6 +188,7 @@ update public.profiles set role = 'admin' where email = 'admin@example.com';
 | `create_shop_seller_profile(store_name)` | مشتری یا فروشندهٔ واردشده | `shop_sellers` را درج یا به‌روز می‌کند و مشتری را به `seller` ارتقا می‌دهد. |
 | `approve_shop_product_import_items(import_id, item_ids)` | فروشنده | پیش‌نویس‌های معتبر و pending را به `shop_products` به‌صورت فهرست فعال و بدون عکس کپی می‌کند، آن‌ها را approved می‌کند، و اگر ردیف pending نماند پرونده را completed می‌کند. |
 | `reject_shop_product_import_item(item_id)` | فروشنده | یک پیش‌نویس pending را `rejected` می‌کند و اگر چیزی pending نماند پرونده را completed می‌کند. |
+| `seller_shop_order_lines()` | فروشندهٔ واردشده | قلم‌های خرید فروشگاه را برمی‌گرداند که محصولشان مال همان فروشنده است. `security definer`. به `authenticated` داده شده است. |
 
 تریگرهایی که باید دانست:
 
@@ -181,7 +199,7 @@ update public.profiles set role = 'admin' where email = 'admin@example.com';
 
 ## Row Level Security
 
-RLS روی `profiles`، `orders`، `order_products`، `agent_messages`، `order_comments`، `order_chat_reads`، `shop_sellers`، `shop_products`، `shop_product_imports` و `shop_product_import_items` روشن است.
+RLS روی `profiles`، `orders`، `order_products`، `agent_messages`، `order_comments`، `order_chat_reads`، `shop_sellers`، `shop_products`، `shop_categories`، `contact_messages`، `shop_product_imports` و `shop_product_import_items` روشن است.
 
 سفارش:
 
@@ -201,9 +219,10 @@ RLS روی `profiles`، `orders`، `order_products`، `agent_messages`، `order_
 
 فروشگاه:
 
-- هر کس، از جمله بازدیدکنندهٔ ناشناس، `shop_products` را وقتی `is_active` true است می‌بیند. فروشنده محصول متوقف‌شدهٔ خودش را هم می‌بیند.
-- فقط همان فروشنده می‌تواند محصولش را درج، به‌روز یا حذف کند، و فقط اگر `profiles.role` برابر `seller` باشد و ردیف `shop_sellers` وجود داشته باشد.
-- فروشنده `shop_sellers.store_name` خودش را می‌خواند و به‌روز می‌کند.
+- هر کس، از جمله بازدیدکنندهٔ ناشناس، `shop_products` را وقتی `is_active` true است می‌بیند. فروشنده محصول متوقف‌شدهٔ خودش را هم می‌بیند. ادمین بعد از `shop-categories.sql` همهٔ محصول‌ها، از جمله متوقف‌ها، را می‌بیند.
+- فقط همان فروشنده می‌تواند محصولش را درج، به‌روز یا حذف کند، و فقط اگر `profiles.role` برابر `seller` باشد و ردیف `shop_sellers` وجود داشته باشد. ادمین بعد از `shop-categories.sql` هر محصولی را به‌روز یا حذف می‌کند.
+- فروشنده `shop_sellers.store_name` خودش را می‌خواند و به‌روز می‌کند. ادمین بعد از `shop-categories.sql` نام همهٔ فروشگاه‌ها را می‌خواند.
+- هر کس `shop_categories` را می‌خواند. فقط ادمین دسته‌بندی را درج، به‌روز یا حذف می‌کند.
 - پرونده و پیش‌نویس ورود فقط برای فروشندهٔ مالک دیده می‌شود.
 
 سیاست‌های realtime روی `realtime.messages` به broadcast و presence اجازه می‌دهند اگر موضوع `chat-inbox:<شناسه کاربر>` یا `<شناسه سفارش>:<…>` باشد و فراخواننده مشتری، ایجنت مسئول، یا ادمین باشد. `order_comments` و `order_chat_reads` به انتشار `supabase_realtime` اضافه شده‌اند.
@@ -248,9 +267,41 @@ RLS روی `profiles`، `orders`، `order_products`، `agent_messages`، `order_
 
 فروشنده پیش‌نویس‌ها را در مرکز فروشنده می‌بیند و از مرورگر `approve_shop_product_import_items` یا `reject_shop_product_import_item` را صدا می‌زند. محصول تأییدشده بدون عکس منتشر می‌شود.
 
+### `GET /api/rates`
+
+عمومی است و نشست نمی‌خواهد.
+
+`src/lib/rates.ts` اول `https://call5.tgju.org/ajax.json` را می‌خواند و اگر نشد `https://call1.tgju.org/ajax.json` را. فیلدهای `current.price_dollar_rl` و `current.price_cny` را برمی‌دارد. هر دو قیمت به ریال‌اند، همان‌طور که آن تابلو منتشر می‌کند. سرور آخرین تابلوی موفق را ۶۰ ثانیه نگه می‌دارد. اگر درخواست بعدی شکست بخورد و تابلویی در حافظه باشد، همان برمی‌گردد. اگر هنوز هیچ تابلویی گرفته نشده باشد، مسیر با `503` جواب می‌دهد.
+
+بدنه `{ usd, cny, fetchedAt }` است. هر نرخ `price`، `change` (درصد)، `direction` (`high` یا `low` یا `flat`) و `updatedAt` دارد. `updatedAt` زمان آخرین تغییر خود بازار است، پس اگر قیمت تکان نخورده باشد همان ساعت می‌ماند. هر درخواست به منبع یک پارامتر تازه دارد تا کش پنج‌دقیقه‌ای آن منبع دوباره استفاده نشود. پاسخ مسیر `Cache-Control: no-store` است. `ExchangeRates` نواری است که به سقف `/`، `/contact` و همهٔ صفحه‌های `/shop` چسبیده و بالای هدر است، و هر ۶۰ ثانیه دوباره می‌پرسد.
+
+## پرداخت
+
+`supabase/payment-gateways.sql` جدول‌های `payment_gateways` و `payment_transactions` و تابع `next_payment_order_id()` را می‌سازد. یک بار در SQL Editor سوپابیس اجرا شود. روی هر دو جدول RLS روشن است و سیاستی ندارند؛ `anon` و `authenticated` نمی‌توانند بخوانند. نوشتن با service role است.
+
+درگاه‌ها استراتژی‌اند و در `src/lib/payments/` هستند: `ZarinpalGateway` و `MellatGateway`، ثبت‌شده در `registry.ts`. مبلغ عدد صحیح ریال است. ادمین از زبانهٔ درگاه پرداخت یک درگاه را فعال می‌کند، کلیدها را ذخیره می‌کند، و می‌تواند آن را در سندباکس بگذارد. `GET /api/admin/payment-gateways` رازها را ماسک‌شده برمی‌گرداند. `PUT` اگر فیلد راز خالی باشد مقدار ذخیره‌شده را نگه می‌دارد. `GET /api/admin/payments` آخرین ۱۰۰۰ تراکنش را می‌دهد. در گزارش پرداخت، و در جدول‌های کاربران، ثبت سفارش، خرید فروشگاه و پیام‌های تماس، مرورگر ردیف‌های بارشده را فیلتر می‌کند، هر صفحه ۱۰ ردیف نشان می‌دهد، و ردیف‌های مطابق جستجو را به فایل `.xls` از نوع SpreadsheetML می‌دهد.
+
+`POST /api/shop/checkout` مسیر فروشگاه است. بدنه `{ gatewayCode, lines: [{ productId, quantity }] }` است و مبلغ نمی‌پذیرد. محصول‌های فعال `shop_products` را دوباره می‌خواند، ردیف گم‌شده یا بیش از موجودی را رد می‌کند، با `loadRates()` تابلوی نرخ را می‌گیرد و `rialAmount` را جمع می‌کند. یک ردیف `orders` با دستهٔ `فروشگاه` و `price` برابر همان جمع ریال می‌سازد، سپس برای هر قلم یک ردیف `order_products`. `startPayment` یک ردیف `pending` در `payment_transactions` می‌سازد و آدرس درگاه را برمی‌گرداند. زرین‌پال ریدایرکت GET است. ملت POST فیلد `RefId` است. مرورگر سبد را فقط بعد از رسیدن این پاسخ پاک می‌کند. اگر درخواست درگاه شکست بخورد، سفارش تازه و ردیف‌هایش حذف می‌شوند. ردیف تراکنش ناموفق می‌ماند. تسویه `shop_products.stock` را عوض نمی‌کند. هزینهٔ ارسال به مبلغ اضافه نمی‌شود.
+
+`GET` و `POST` روی `/api/payments/callback/[gateway]`، `completePayment` را صدا می‌زنند. وضعیت `OK` با خود درگاه تأیید می‌شود. ملت اول verify و بعد settle می‌شود. نتیجهٔ موفق `paid` یا `verified` است و شمارهٔ پیگیری به `orders.notes` اضافه می‌شود. مرورگر به `/payment/result` می‌رود. `POST /api/payments/request` هنوز مبلغی را که کاربر فرستاده برای حساب واردشده می‌پذیرد. سبد فروشگاه آن را صدا نمی‌زند.
+
 ## سبد فروشگاه
 
-`ShopCartProvider` آرایهٔ `{ productId, quantity }` را در `localStorage` با کلید `sino-persia-shop-cart` نگه می‌دارد. تعداد نمی‌تواند از موجودی‌ای که هنگام افزودن معلوم بوده بیشتر شود. تسویه محصول‌های فعال را دوباره می‌خواند، ردیف گم‌شده یا بیش از موجودی را رد می‌کند، و یک ردیف `orders` به‌همراه یک ردیف `order_products` برای هر قلم می‌سازد. `shop_products.stock` را کم نمی‌کند. سبد بعد از درج سفارش پاک می‌شود، حتی اگر درج ردیف‌ها شکست بخورد؛ در آن حالت متن اقلام فقط در `orders.notes` می‌ماند.
+`ShopCartProvider` آرایهٔ `{ productId, quantity }` را در `localStorage` با کلید `sino-persia-shop-cart` نگه می‌دارد. تعداد نمی‌تواند از موجودی‌ای که هنگام افزودن معلوم بوده بیشتر شود. سبد درگاه‌های فعال را از `GET /api/payments/gateways` می‌گیرد و کد انتخاب‌شده را با ردیف‌ها به `POST /api/shop/checkout` می‌فرستد. رقم ریال روی صفحه از همان تابلوی کش‌شده است. مبلغی که گرفته می‌شود همان است که سرور هنگام تسویه حساب می‌کند.
+
+## پنل مشتری
+
+`/dashboard` سفارش‌های مشتری واردشده را می‌خواند. ردیف‌هایی که `category` آن‌ها `فروشگاه` است در زبانهٔ خرید فروشگاه هستند. بقیه در زبانهٔ ثبت سفارش هستند. شمارنده‌ها داخل زبانهٔ باز حساب می‌شوند. فرم سفارش تازه فقط در زبانهٔ تأمین است و خرید فروشگاه به آن فرم داده نمی‌شود.
+
+## کاتالوگ ادمین
+
+`/admin/products` دو زبانه دارد. دسته‌بندی‌ها از طریق کلاینت سوپابیس ادمین واردشده، `shop_categories` را می‌سازد، نامش را عوض می‌کند، و حذف می‌کند. محصولات همهٔ ردیف‌های `shop_products` را، از جمله متوقف‌ها، با نام فروشگاه از `shop_sellers` نشان می‌دهد. ادمین می‌تواند `title_en`، `title_fa`، `category`، `sku`، `price`، `currency` و `stock` را ویرایش کند، `is_active` را عوض کند، یا ردیف را حذف کند. این نوشتن‌ها به سیاست‌های `shop-categories.sql` نیاز دارند. فرم فروشنده و برچسب دسته در فروشگاه، وقتی آن جدول باشد، `shop_categories` را می‌خوانند.
+
+## جدول‌های ادمین
+
+کاربران، ثبت سفارش، خرید فروشگاه و پیام‌های تماس در `/admin`، و گزارش پرداخت در `AdminPaymentPanel`، از `src/components/AdminTableControls.tsx` استفاده می‌کنند. جستجو و فیلتر در مرورگر روی ردیف‌های بارشده انجام می‌شود. هر صفحه ۱۰ ردیف نشان می‌دهد. `src/lib/excel.ts` ردیف‌های فیلترشده را، از همهٔ صفحه‌ها، به فایل `.xls` از نوع SpreadsheetML می‌دهد. فیلتر کاربران نقش است، فیلتر ثبت سفارش و خرید فروشگاه وضعیت است، فیلتر پیام‌ها `جدید` یا `خوانده‌شده` است، و فیلتر پرداخت وضعیت، درگاه، و سندباکس یا واقعی است. `GET /api/admin/payments` هنوز فقط ۱۰۰۰ تراکنش آخر را برمی‌گرداند، پس گزارش ردیف قدیمی‌تر را صادر نمی‌کند.
+
+صفحهٔ ایجنت سفارش‌های سپرده‌شده را می‌خواند و بعد ردیف‌هایی را که `category` آن‌ها `فروشگاه` است کنار می‌گذارد.
 
 ## گفتگوی realtime
 
@@ -260,8 +311,8 @@ RLS روی `profiles`، `orders`، `order_products`، `agent_messages`، `order_
 
 - کارت سفارش مشتری دکمهٔ حذف دارد. RLS موجود در مخزن حذف را فقط به ادمین می‌دهد، پس حذف مشتری شکست می‌خورد مگر سیاست قدیمی بیرون از این مخزن هنوز اجازه بدهد.
 - دکمهٔ دانلود روی کارت سفارش مشتری فقط یک هشدار نشان می‌دهد و فایلی نمی‌سازد.
-- صفحهٔ ایجنت همهٔ سفارش‌ها را query می‌کند. RLS فقط سفارش‌های سپرده‌شده به همان ایجنت را برمی‌گرداند، پس سفارش بدون ایجنت تا زمان انتخاب، فقط در صفحهٔ ادمین می‌ماند.
-- `/orders` مرکز فروشنده حالت خالی است. تسویهٔ فروشگاه یک ردیف `orders` برای مشتری می‌سازد، نه سفارش فروشنده.
+- صفحهٔ ایجنت همهٔ سفارش‌ها را query می‌کند و بعد ردیف‌هایی را که دسته‌شان `فروشگاه` است پنهان می‌کند. RLS فقط سفارش‌های سپرده‌شده به همان ایجنت را برمی‌گرداند، پس سفارش تأمین بدون ایجنت تا زمان انتخاب، فقط در صفحهٔ ادمین می‌ماند.
+- `/orders` مرکز فروشنده `seller_shop_order_lines()` را صدا می‌زند و فقط قلم‌های فروشگاهی همان فروشنده را نشان می‌دهد. تا وقتی `seller-orders.sql` اجرا نشده، صفحه همان فایل را می‌خواهد. فروشنده آنجا سفارش را به‌روز نمی‌کند.
 - تسویهٔ فروشگاه موجودی را عوض نمی‌کند.
 
 ## به‌روز ماندن این سند
