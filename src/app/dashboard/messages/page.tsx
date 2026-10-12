@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import ChatPanel from "@/components/ChatPanel";
+import OrderAssistant from "@/components/OrderAssistant";
 import type { Order, Ticket } from "@/lib/types";
 
 export default function MessagesPage() {
   const [supabase] = useState(() => createClient());
-  const [tab, setTab] = useState<"tickets" | "chat">("tickets");
+  const [tab, setTab] = useState<"tickets" | "chat" | "assistant">("tickets");
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -100,11 +101,12 @@ export default function MessagesPage() {
   return (
     <div>
       <div className="topbar">
-        <div className="title"><h1>پیام‌ها</h1><p>تیکت‌های پشتیبانی و پیام‌های ایجنت</p></div>
+        <div className="title"><h1>پیام‌ها</h1><p>تیکت پشتیبانی، گفتگو با ایجنت، و دستیار سفارش</p></div>
       </div>
       <div className="msg-tabs">
         <button className={`msg-tab ${tab === "tickets" ? "active" : ""}`} onClick={() => setTab("tickets")}>تیکت‌های پشتیبانی</button>
         <button className={`msg-tab ${tab === "chat" ? "active" : ""}`} onClick={() => setTab("chat")}>چت با ایجنت</button>
+        <button className={`msg-tab ${tab === "assistant" ? "active" : ""}`} onClick={() => setTab("assistant")}>دستیار سفارش</button>
       </div>
 
       {tab === "tickets" && (
@@ -143,6 +145,8 @@ export default function MessagesPage() {
           </div>
         </div>
       )}
+
+      {tab === "assistant" && <OrderAssistant />}
 
       {tab === "chat" && <div className="chat-layout">
         <div className="chat-orders-list">

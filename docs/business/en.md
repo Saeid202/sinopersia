@@ -1,6 +1,6 @@
 # Sino Persia — Business overview
 
-Last updated: 9 October 2026
+Last updated: 12 October 2026
 
 This document explains what Sino Persia is and what the product does today. It is written for founders, operations, sales, and partners. A separate technical document will come later.
 
@@ -81,7 +81,7 @@ The customer dashboard keeps two lists. ثبت سفارش is the sourcing reques
 A customer signs in with email and password and can reset a forgotten password. The account has three areas:
 
 - **Orders.** Create, view, edit, and delete sourcing requests. Shop purchases are a separate list on the same page. Those can be viewed. They are not edited as sourcing requests.
-- **Messages.** Open a support ticket, read replies from support, or chat with the agent about a specific order. Unread agent messages are marked.
+- **Messages.** Open a support ticket, read replies from support, or chat with the agent about a specific order. Unread agent messages are marked. A third tab, the order assistant, answers questions about this customer's own orders.
 - **Profile.** Save name, mobile number, address, and postal code. Email is the sign-in address and is not edited here.
 
 Someone who is not a customer is sent to the area that matches their role.
@@ -133,10 +133,11 @@ The homepage, the shop, and the contact page show the free-market price of one U
 
 ## Communication
 
-There are two separate conversations:
+There are three separate conversations:
 
-- **Order chat** is between the customer and the agent, attached to one order. Both sides see new messages.
+- **Order chat** is between the customer and the human agent, attached to one order. Both sides see new messages.
 - **Support tickets** are messages the customer sends to support. Replies appear under the original ticket.
+- **Order assistant** is an automated reply on the Messages page. It explains the signed-in customer's own sourcing orders and shop purchases: status, saved price, and the details already stored on the order. It does not change a price or a status, and it does not send a message to the human agent. The conversation is not saved. Refreshing the page clears it. Until an AI key is configured, the assistant tells the customer it is not connected.
 
 A price update can also include a short message from the agent to the customer.
 

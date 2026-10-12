@@ -32,6 +32,9 @@ Copy `.env.example` to `.env.local`. The dev server and the production build bot
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser client, server client, and the admin Route Handler |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser client and server client. Safe to expose. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Only `POST /api/admin/agents`. Bypasses RLS. Never import it into a client component. |
+| `AI_API_KEY` | Only `POST /api/assistant`. Sent as a bearer token to the chat provider. Never import it into a client component. Empty means the assistant answers 503. |
+| `AI_BASE_URL` | OpenAI-compatible base URL. Default `https://api.openai.com/v1`. Must be `https`. The route calls `POST {AI_BASE_URL}/chat/completions`. |
+| `AI_MODEL` | Model id sent to that provider. Default `gpt-4o-mini`. Use the catalog id, such as `gpt-5.4-nano`. A display name with spaces is rejected. |
 
 `next.config.ts` sets two development options:
 
@@ -81,6 +84,7 @@ Most pages are client components. They call `createClient()` from `src/lib/supab
 | `/seller-centre`, `/products`, `/orders`, `/settings` | Signed-in `seller` who also has a `shop_sellers` row. Otherwise `/seller-centre/login` or `/seller-centre/register`. |
 | `/api/seller-centre/product-imports` | Not covered by the proxy matcher. The route checks the session and `shop_sellers` itself. |
 | `/api/seller-centre/product-fx` | Signed-in seller. Writes the saved rial snapshot. |
+| `/api/assistant` | Not covered by the proxy matcher. The route checks the session and `profiles.role = customer` itself. |
 
 Below 800px, Seller Centre opens Profile, Products, Shop purchases, and Settings from a menu button at the top of the page. The product table and the order tables scroll sideways inside the page.
 
@@ -172,7 +176,7 @@ update public.profiles set role = 'admin' where email = 'admin@example.com';
 These tables are queried by the app and altered by later SQL. Their original `CREATE TABLE` is not in the repo, so a new Supabase project needs that schema from the existing database before the files above will apply:
 
 - `profiles` — `id`, `full_name`, `phone`, `address`, `postal_code`, `email`, `role`
-- `orders` — `id`, `order_number`, `user_id`, `title`, `title_en`, `category`, `part_number`, `assigned_agent_id`, `quantity`, `unit`, `deadline`, `budget`, `shipping_type`, `sample_request`, `notes`, `price`, `status`, `created_at`
+- `orders` — `id`, `order_number`, `user_id`, `title`, `title_en`, `category`, `assigned_agent_id`, `quantity`, `unit`, `deadline`, `budget`, `shipping_type`, `sample_request`, `notes`, `price`, `status`, `created_at`. `part_number` is not on the live table until `add-order-part-number.sql` is run. The TypeScript `Order` type already includes it.
 - `order_products` — `id`, `order_id`, `link`, `description`, `part_number`. `seller-orders.sql` also adds `shop_product_id`, `quantity`, `unit_price`, and `currency` so a shop line can be tied to the seller's product.
 - `order_comments` — chat rows with `author_type` of `customer` or `agent`
 - `agent_messages` — optional note stored when an agent saves a quote
@@ -269,6 +273,14 @@ Extraction limits in `src/lib/product-pdf-extraction.ts`:
 
 The seller reviews drafts in Seller Centre and calls `approve_shop_product_import_items` or `reject_shop_product_import_item` from the browser. Approved products are published without an image.
 
+### `POST /api/assistant`
+
+Body: `{ messages: [{ role: "user" | "assistant", content: string }] }`. At most 12 turns. Each `content` is 1–1,500 characters after trim. The last turn must be `user`. A `system` role from the browser is rejected.
+
+The handler checks the session and `profiles.role = customer` with the anon server client, then loads that customer's latest 15 `orders` with `select("*")`, the same shape the dashboard uses, plus their `order_products` and `agent_messages`. It does not name `orders.part_number`. That column is added only by `add-order-part-number.sql`, and the live table does not have it until that file is run. Naming it makes the read fail. Row Level Security still applies. It sends that text plus the turns to `POST {AI_BASE_URL}/chat/completions` with `AI_MODEL`, temperature `0.2`, and `max_tokens` 500. The provider call times out after 25 seconds. The route does not write to the database. One Node process allows 20 replies per customer per 10 minutes; that cap is not shared across processes.
+
+Responses: `401` unsigned, `403` not a customer, `400` bad body, `429` over the cap, `503` missing key or a non-https base URL, `502` provider failure or empty reply, `200` `{ reply }`.
+
 ### `GET /api/rates`
 
 Public. No session.
@@ -294,6 +306,8 @@ Gateways are a strategy in `src/lib/payments/`: `ZarinpalGateway` and `MellatGat
 ## Customer dashboard
 
 `/dashboard` loads the signed-in customer's `orders`. Rows with `category` `فروشگاه` are the خرید فروشگاه tab. Every other row is the ثبت سفارش tab. Counts are calculated inside the open tab. The new-order form is only on the sourcing tab, and a shop purchase is not passed to that form.
+
+`/dashboard/messages` has three tabs: support tickets, order chat with the assigned agent, and دستیار سفارش. The assistant tab posts the visible turns to `POST /api/assistant` and shows the reply. That conversation is kept in the browser only. Reloading the page clears it. The assistant does not insert `order_comments`, change `status`, or change `price`.
 
 Below 800px, the customer dashboard opens Orders, Messages, and Profile from a menu button at the top of the page. The sourcing and shop-purchase tabs stay on the page. Order cards stack to the screen width. Messages and the profile form do the same.
 

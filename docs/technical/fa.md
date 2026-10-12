@@ -32,6 +32,9 @@
 | `NEXT_PUBLIC_SUPABASE_URL` | کلاینت مرورگر، کلاینت سرور، و Route Handler ادمین |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | کلاینت مرورگر و کلاینت سرور. دیده‌شدنش در کلاینت اشکالی ندارد. |
 | `SUPABASE_SERVICE_ROLE_KEY` | فقط `POST /api/admin/agents`. از RLS عبور می‌کند. هرگز آن را در کامپوننت کلاینت import نکنید. |
+| `AI_API_KEY` | فقط `POST /api/assistant`. به‌صورت bearer به سرویس گفتگو فرستاده می‌شود. هرگز آن را در کامپوننت کلاینت import نکنید. اگر خالی باشد دستیار با ۵۰۳ جواب می‌دهد. |
+| `AI_BASE_URL` | آدرس پایهٔ سازگار با OpenAI. پیش‌فرض `https://api.openai.com/v1`. باید `https` باشد. مسیر `POST {AI_BASE_URL}/chat/completions` را صدا می‌زند. |
+| `AI_MODEL` | شناسهٔ مدلی که برای همان سرویس فرستاده می‌شود. پیش‌فرض `gpt-4o-mini`. شناسهٔ کاتالوگ را بگذارید، مثل `gpt-5.4-nano`. نام نمایشی که فاصله دارد رد می‌شود. |
 
 `next.config.ts` دو تنظیم توسعه دارد:
 
@@ -81,6 +84,7 @@ docs/technical/          همین سند
 | `/seller-centre`، `/products`، `/orders`، `/settings` | `seller` واردشده که ردیف `shop_sellers` هم دارد. وگرنه `/seller-centre/login` یا `/seller-centre/register`. |
 | `/api/seller-centre/product-imports` | در matcher پروکسی نیست. خود مسیر، نشست و `shop_sellers` را چک می‌کند. |
 | `/api/seller-centre/product-fx` | فروشندهٔ واردشده. نرخ ریالی لحظهٔ ذخیره را روی محصول می‌نویسد. |
+| `/api/assistant` | در matcher پروکسی نیست. خود مسیر نشست و `profiles.role = customer` را چک می‌کند. |
 
 زیر ۸۰۰ پیکسل، مرکز فروشنده پروفایل، محصولات، خریدهای فروشگاه و تنظیمات را از دکمهٔ منو در بالای صفحه باز می‌کند. جدول محصولات و جدول سفارش‌ها داخل صفحه به پهلو اسکرول می‌شوند.
 
@@ -172,7 +176,7 @@ update public.profiles set role = 'admin' where email = 'admin@example.com';
 برنامه این جدول‌ها را می‌خواند و SQLهای بعدی آن‌ها را تغییر می‌دهند. `CREATE TABLE` اولیه‌شان در مخزن نیست. پروژهٔ تازهٔ Supabase پیش از فایل‌های بالا به همان اسکیمای پایگاه موجود نیاز دارد:
 
 - `profiles` — `id`، `full_name`، `phone`، `address`، `postal_code`، `email`، `role`
-- `orders` — `id`، `order_number`، `user_id`، `title`، `title_en`، `category`، `part_number`، `assigned_agent_id`، `quantity`، `unit`، `deadline`، `budget`، `shipping_type`، `sample_request`، `notes`، `price`، `status`، `created_at`
+- `orders` — `id`، `order_number`، `user_id`، `title`، `title_en`، `category`، `assigned_agent_id`، `quantity`، `unit`، `deadline`، `budget`، `shipping_type`، `sample_request`، `notes`، `price`، `status`، `created_at`. ستون `part_number` تا وقتی `add-order-part-number.sql` اجرا نشود روی جدول زنده نیست. نوع TypeScript با نام `Order` از قبل آن را دارد.
 - `order_products` — `id`، `order_id`، `link`، `description`، `part_number`. `seller-orders.sql` همچنین `shop_product_id`، `quantity`، `unit_price` و `currency` را اضافه می‌کند تا قلم فروشگاه به محصول فروشنده وصل شود.
 - `order_comments` — ردیف گفتگو با `author_type` برابر `customer` یا `agent`
 - `agent_messages` — یادداشت اختیاری که هنگام ذخیرهٔ قیمت ایجنت ثبت می‌شود
@@ -269,6 +273,14 @@ RLS روی `profiles`، `orders`، `order_products`، `agent_messages`، `order_
 
 فروشنده پیش‌نویس‌ها را در مرکز فروشنده می‌بیند و از مرورگر `approve_shop_product_import_items` یا `reject_shop_product_import_item` را صدا می‌زند. محصول تأییدشده بدون عکس منتشر می‌شود.
 
+### `POST /api/assistant`
+
+بدنه: `{ messages: [{ role: "user" | "assistant", content: string }] }`. حداکثر ۱۲ نوبت. هر `content` بعد از trim بین ۱ تا ۱۵۰۰ نویسه است. آخرین نوبت باید `user` باشد. نقش `system` از مرورگر رد می‌شود.
+
+هندلر با کلاینت anon سرور، نشست و `profiles.role = customer` را چک می‌کند، سپس ۱۵ سفارش تازهٔ همان مشتری را با `select("*")` می‌خواند، همان شکلی که پنل مشتری می‌خواند، به‌همراه `order_products` و `agent_messages`. `orders.part_number` را نام نمی‌برد. آن ستون فقط با `add-order-part-number.sql` اضافه می‌شود و تا وقتی آن فایل اجرا نشده باشد روی جدول زنده نیست. نام بردنش خواندن را شکست می‌دهد. Row Level Security همچنان اعمال می‌شود. این متن به‌همراه نوبت‌ها به `POST {AI_BASE_URL}/chat/completions` با `AI_MODEL`، دمای `0.2` و `max_tokens` برابر ۵۰۰ فرستاده می‌شود. تماس با سرویس بعد از ۲۵ ثانیه قطع می‌شود. این مسیر چیزی در پایگاه نمی‌نویسد. هر فرایند Node برای هر مشتری ۲۰ پاسخ در ۱۰ دقیقه می‌پذیرد؛ این سقف بین چند فرایند مشترک نیست.
+
+پاسخ‌ها: `401` بدون ورود، `403` غیرمشتری، `400` بدنهٔ بد، `429` عبور از سقف، `503` نبودن کلید یا آدرس غیر `https`، `502` خطای سرویس یا پاسخ خالی، `200` با `{ reply }`.
+
 ### `GET /api/rates`
 
 عمومی است و نشست نمی‌خواهد.
@@ -294,6 +306,8 @@ RLS روی `profiles`، `orders`، `order_products`، `agent_messages`، `order_
 ## پنل مشتری
 
 `/dashboard` سفارش‌های مشتری واردشده را می‌خواند. ردیف‌هایی که `category` آن‌ها `فروشگاه` است در زبانهٔ خرید فروشگاه هستند. بقیه در زبانهٔ ثبت سفارش هستند. شمارنده‌ها داخل زبانهٔ باز حساب می‌شوند. فرم سفارش تازه فقط در زبانهٔ تأمین است و خرید فروشگاه به آن فرم داده نمی‌شود.
+
+`/dashboard/messages` سه زبانه دارد: تیکت پشتیبانی، گفتگو با ایجنت مسئول، و دستیار سفارش. زبانهٔ دستیار نوبت‌های روی صفحه را به `POST /api/assistant` می‌فرستد و پاسخ را نشان می‌دهد. این گفتگو فقط در مرورگر می‌ماند. با بارگذاری دوبارهٔ صفحه پاک می‌شود. دستیار `order_comments` نمی‌سازد و `status` یا `price` را عوض نمی‌کند.
 
 زیر ۸۰۰ پیکسل، پنل مشتری سفارشات، پیام‌ها و پروفایل را از دکمهٔ منو در بالای صفحه باز می‌کند. زبانه‌های ثبت سفارش و خرید فروشگاه روی صفحه می‌مانند. کارت سفارش‌ها، پیام‌ها و فرم پروفایل با عرض صفحه جور می‌شوند.
 
