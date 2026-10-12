@@ -1,6 +1,6 @@
 # Sino Persia — Technical documentation
 
-Last updated: 9 October 2026
+Last updated: 12 October 2026
 
 This document is for people changing the app. It describes the code and the Supabase project as they exist in this repository. What the product means for customers and staff is in `docs/business/en.md`.
 
@@ -82,6 +82,8 @@ Most pages are client components. They call `createClient()` from `src/lib/supab
 | `/api/seller-centre/product-imports` | Not covered by the proxy matcher. The route checks the session and `shop_sellers` itself. |
 | `/api/seller-centre/product-fx` | Signed-in seller. Writes the saved rial snapshot. |
 
+Below 800px, Seller Centre opens Profile, Products, Shop purchases, and Settings from a menu button at the top of the page. The product table and the order tables scroll sideways inside the page.
+
 After password login, `AuthCard` honors a same-origin `?next=` path that starts with a single `/`. Without it, the destination is `/admin`, `/agent`, `/seller-centre`, or `/dashboard` from `profiles.role`.
 
 Customer registration is `supabase.auth.signUp` with `full_name` in user metadata. The password must be at least 6 characters. Seller registration uses a separate form, password at least 8 characters, and metadata `account_type: "seller"` plus `store_name`. Password reset emails redirect to `/reset-password`.
@@ -113,7 +115,7 @@ The email must already belong to a `profiles` row. After the update, that person
 
 ### Changing a role later
 
-On `/admin`, the **Users and roles** tab updates `profiles.role` directly. The same trigger allows it only because the caller is an admin. Choices in that dropdown are customer, agent, admin, and seller.
+On `/admin`, the **Users and roles** tab updates `profiles.role` directly. The same trigger allows it only because the caller is an admin. Choices in that dropdown are customer, agent, admin, and seller. Below 800px that tab row is hidden. The same sections, plus product management, are in the admin menu opened from the top of the page.
 
 Setting the role to `seller` also runs `ensure_shop_seller_profile`, which inserts a `shop_sellers` row when one is missing. The store name falls back to the profile name, the part of the email before `@`, or the text `Seller store`.
 
@@ -292,6 +294,8 @@ Gateways are a strategy in `src/lib/payments/`: `ZarinpalGateway` and `MellatGat
 ## Customer dashboard
 
 `/dashboard` loads the signed-in customer's `orders`. Rows with `category` `فروشگاه` are the خرید فروشگاه tab. Every other row is the ثبت سفارش tab. Counts are calculated inside the open tab. The new-order form is only on the sourcing tab, and a shop purchase is not passed to that form.
+
+Below 800px, the customer dashboard opens Orders, Messages, and Profile from a menu button at the top of the page. The sourcing and shop-purchase tabs stay on the page. Order cards stack to the screen width. Messages and the profile form do the same.
 
 ## Admin catalogue
 

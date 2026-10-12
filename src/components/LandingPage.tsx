@@ -5,6 +5,7 @@ import Link from "next/link";
 import AuthModal from "@/components/AuthModal";
 import BrandLogo from "@/components/BrandLogo";
 import ExchangeRates from "@/components/ExchangeRates";
+import SiteHeader from "@/components/SiteHeader";
 
 const processSteps = [
   { number: "۰۱", title: "ثبت سفارش", description: "لینک کالا، تعداد و توضیحات هر قلم را در یک سفارش ثبت کنید." },
@@ -40,25 +41,16 @@ export default function LandingPage() {
   return (
     <main className="landing-site" id="home">
       <ExchangeRates />
-      <header className="landing-header">
-        <nav className="landing-nav" aria-label="ناوبری اصلی">
-          <a className="landing-brand" href="#home" aria-label="ساینو پرشیا، صفحه اصلی">
-            <BrandLogo className="landing-logo" priority />
-          </a>
-          <div className="landing-links">
-            <Link href="/shop">فروشگاه</Link>
-            <a href="#process">فرآیند</a>
-            <a href="#consolidation">تجمیع</a>
-            <a href="#benefits">چرا ما</a>
-            <a href="#suitable">مناسب شما</a>
-            <Link href="/contact">تماس با ما</Link>
-          </div>
-          <div className="landing-actions">
-            <button type="button" className="landing-login" onClick={openAuth}>ورود</button>
-            <button type="button" className="landing-button landing-button-small" onClick={openAuth}>ثبت سفارش</button>
-          </div>
-        </nav>
-      </header>
+      <SiteHeader
+        brandHref="#home"
+        hashBase=""
+        actions={
+          <>
+            <button type="button" className="site-login" onClick={openAuth}>ورود</button>
+            <button type="button" className="site-button" onClick={openAuth}>ثبت سفارش</button>
+          </>
+        }
+      />
 
       <section className="landing-hero" aria-labelledby="hero-title">
         <div className="landing-hero-inner">

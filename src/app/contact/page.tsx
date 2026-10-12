@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import BrandLogo from "@/components/BrandLogo";
 import ExchangeRates from "@/components/ExchangeRates";
+import SiteHeader from "@/components/SiteHeader";
 import { createClient } from "@/lib/supabase/client";
 
 const WHATSAPP_URL = "https://wa.me/14168825015";
@@ -70,25 +70,14 @@ export default function ContactPage() {
   return (
     <main className="contact-page">
       <ExchangeRates />
-      <header className="landing-header">
-        <nav className="landing-nav" aria-label="ناوبری اصلی">
-          <Link className="landing-brand" href="/" aria-label="ساینو پرشیا، صفحه اصلی">
-            <BrandLogo className="landing-logo" priority />
-          </Link>
-          <div className="landing-links">
-            <Link href="/shop">فروشگاه</Link>
-            <Link href="/#process">فرآیند</Link>
-            <Link href="/#consolidation">تجمیع</Link>
-            <Link href="/#benefits">چرا ما</Link>
-            <Link href="/#suitable">مناسب شما</Link>
-            <Link href="/contact" aria-current="page">تماس با ما</Link>
-          </div>
-          <div className="landing-actions">
-            <Link className="landing-login" href="/login">ورود</Link>
-            <Link className="landing-button landing-button-small" href="/login">ثبت سفارش</Link>
-          </div>
-        </nav>
-      </header>
+      <SiteHeader
+        actions={
+          <>
+            <Link className="site-login" href="/login">ورود</Link>
+            <Link className="site-button" href="/login">ثبت سفارش</Link>
+          </>
+        }
+      />
 
       <section className="contact-section" aria-labelledby="contact-title">
         <div className="contact-copy">

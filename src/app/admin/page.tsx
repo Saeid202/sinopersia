@@ -1,6 +1,7 @@
 "use client";
 
-import { startTransition, useCallback, useEffect, useState } from "react";
+import { startTransition, Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import AdminPaymentPanel from "@/components/AdminPaymentPanel";
 import { AdminPager, AdminTableToolbar, usePagedRows } from "@/components/AdminTableControls";
 import { downloadExcel } from "@/lib/excel";
@@ -36,9 +37,15 @@ function contains(query: string, values: (string | null | undefined)[]) {
   return values.some((value) => value?.toLocaleLowerCase().includes(query));
 }
 
-export default function AdminPage() {
+function AdminScreen() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [supabase] = useState(() => createClient());
-  const [tab, setTab] = useState<Tab>("overview");
+  const tabParam = searchParams.get("tab");
+  const tab: Tab = tabParam === "users" || tabParam === "orders" || tabParam === "shop" || tabParam === "messages" || tabParam === "payments" ? tabParam : "overview";
+  function setTab(next: Tab) {
+    router.replace(next === "overview" ? "/admin" : `/admin?tab=${next}`, { scroll: false });
+  }
   const [profiles, setProfiles] = useState<AdminProfile[]>([]);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [messages, setMessages] = useState<ContactMessage[]>([]);
@@ -156,7 +163,7 @@ export default function AdminPage() {
         <div className="title"><h1>مدیریت سایت</h1><p>مدیریت کاربران، سفارش‌ها و درگاه‌های پرداخت</p></div>
       </div>
 
-      <div className="admin-tabs">
+      <div className="admin-tabs admin-section-tabs">
         <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>نمای کلی</button>
         <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>کاربران و نقش‌ها</button>
         <button className={tab === "orders" ? "active" : ""} onClick={() => setTab("orders")}>ثبت سفارش</button>
@@ -256,5 +263,13 @@ export default function AdminPage() {
         </>}
       </section>}
     </div>
+  );
+}
+
+export default function AdminPage() {
+  return (
+    <Suspense fallback={<p className="empty-state">در حال بارگذاری...</p>}>
+      <AdminScreen />
+    </Suspense>
   );
 }
