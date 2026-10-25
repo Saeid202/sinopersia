@@ -21,7 +21,7 @@ type ShopCartContextValue = {
   lines: ShopCartLine[];
   ready: boolean;
   addProduct: (product: ShopProduct, quantity?: number) => void;
-  setQuantity: (productId: string, quantity: number) => void;
+  setQuantity: (product: ShopProduct, quantity: number) => void;
   removeProduct: (productId: string) => void;
   clearCart: () => void;
   itemCount: number;
@@ -63,22 +63,23 @@ export function ShopCartProvider({ children }: { children: ReactNode }) {
     lines,
     ready,
     addProduct: (product, quantity = 1) => {
-      if (product.stock < 1) return;
+      if (product.stock < product.moq) return;
       setLines((current) => {
         const existing = current.find((line) => line.productId === product.id);
-        if (!existing) return [...current, { productId: product.id, quantity: Math.min(quantity, product.stock) }];
+        if (!existing) return [...current, { productId: product.id, quantity: Math.min(Math.max(quantity, product.moq), product.stock) }];
         return current.map((line) => line.productId === product.id
-          ? { ...line, quantity: Math.min(line.quantity + quantity, product.stock) }
+          ? { ...line, quantity: Math.min(Math.max(line.quantity + quantity, product.moq), product.stock) }
           : line);
       });
     },
-    setQuantity: (productId, quantity) => {
+    setQuantity: (product, quantity) => {
       if (quantity < 1) {
-        setLines((current) => current.filter((line) => line.productId !== productId));
+        setLines((current) => current.filter((line) => line.productId !== product.id));
         return;
       }
-      setLines((current) => current.map((line) => line.productId === productId
-        ? { ...line, quantity }
+      if (product.stock < product.moq) return;
+      setLines((current) => current.map((line) => line.productId === product.id
+        ? { ...line, quantity: Math.min(Math.max(quantity, product.moq), product.stock) }
         : line));
     },
     removeProduct: (productId) => setLines((current) => current.filter((line) => line.productId !== productId)),

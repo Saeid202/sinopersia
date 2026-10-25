@@ -2,6 +2,8 @@ export type ShopProduct = {
   id: string;
   seller_id: string;
   category: string;
+  term: "FOB" | "CRF";
+  port: "Shanghai" | "Guangzhou" | "Ningbo" | "Yiwu";
   sku: string | null;
   title_en: string;
   title_fa: string | null;
@@ -9,6 +11,8 @@ export type ShopProduct = {
   description_fa: string | null;
   price: number;
   currency: "CNY" | "USD";
+  unit: string;
+  moq: number;
   stock: number;
   image_url: string | null;
   is_active: boolean;
@@ -53,6 +57,7 @@ export const FALLBACK_SHOP_CATEGORIES: ShopCategory[] = [
   { id: "Home Appliances", name_en: "Home Appliances", name_fa: "لوازم خانگی", sort_order: 7 },
   { id: "Clothing & Textiles", name_en: "Clothing & Textiles", name_fa: "پوشاک و نساجی", sort_order: 8 },
   { id: "Other", name_en: "Other", name_fa: "سایر", sort_order: 9 },
+  { id: "Steel", name_en: "Steel", name_fa: "فولاد", sort_order: 11 },
 ];
 
 export function categoryLabel(category: string, categories: Pick<ShopCategory, "name_en" | "name_fa">[] = []) {
@@ -66,6 +71,7 @@ export function getProductCategory(category: string) {
     "Auto Parts": "قطعات خودرو",
     "Construction Equipment": "تجهیزات ساختمانی",
     "Raw Materials": "مواد اولیه",
+    Steel: "فولاد",
     Machinery: "ماشین‌آلات",
     "Home Appliances": "لوازم خانگی",
     "Clothing & Textiles": "پوشاک و نساجی",
@@ -73,4 +79,10 @@ export function getProductCategory(category: string) {
     General: "عمومی",
   };
   return translations[category] || category;
+}
+
+export function getProductUnit(unit: string, language: "en" | "fa" = "fa") {
+  if (language === "fa" && unit === "Ton") return "تن";
+  if (language === "fa" && unit === "Unit") return "عدد";
+  return unit;
 }

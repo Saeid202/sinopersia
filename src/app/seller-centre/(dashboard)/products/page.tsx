@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { FALLBACK_SHOP_CATEGORIES, type ShopCategory } from "@/lib/shop";
 import { useSellerLocale } from "@/components/SellerCentreShell";
+import { getProductUnit } from "@/lib/shop";
 
 async function snapshotProductRates(body: { productIds?: string[]; missingOnly?: boolean }) {
   const response = await fetch("/api/seller-centre/product-fx", {
@@ -22,6 +23,8 @@ type ShopProduct = {
   id: string;
   seller_id: string;
   category: string;
+  term: "FOB" | "CRF";
+  port: "Shanghai" | "Guangzhou" | "Ningbo" | "Yiwu";
   sku: string | null;
   title_en: string;
   title_fa: string | null;
@@ -29,6 +32,8 @@ type ShopProduct = {
   description_fa: string | null;
   price: number;
   currency: "CNY" | "USD";
+  unit: string;
+  moq: number;
   stock: number;
   image_url: string | null;
   is_active: boolean;
@@ -54,17 +59,23 @@ type ProductImportItem = {
   title_en: string;
   title_fa: string | null;
   category: string;
+  term: "FOB" | "CRF";
+  port: "Shanghai" | "Guangzhou" | "Ningbo" | "Yiwu";
   sku: string | null;
   description_en: string | null;
   description_fa: string | null;
   price: number | null;
   currency: "CNY" | "USD" | null;
+  unit: string;
+  moq: number;
   stock: number | null;
   review_status: "pending" | "approved" | "rejected";
 };
 
 type ProductDraft = {
   category: string;
+  term: "FOB" | "CRF";
+  port: "Shanghai" | "Guangzhou" | "Ningbo" | "Yiwu";
   sku: string;
   title_en: string;
   title_fa: string;
@@ -72,6 +83,8 @@ type ProductDraft = {
   description_fa: string;
   price: string;
   currency: "CNY" | "USD";
+  unit: string;
+  moq: string;
   stock: string;
   image_url: string;
   is_active: boolean;
@@ -79,6 +92,8 @@ type ProductDraft = {
 
 const emptyDraft = (): ProductDraft => ({
   category: "",
+  term: "FOB",
+  port: "Shanghai",
   sku: "",
   title_en: "",
   title_fa: "",
@@ -86,6 +101,8 @@ const emptyDraft = (): ProductDraft => ({
   description_fa: "",
   price: "",
   currency: "CNY",
+  unit: "Unit",
+  moq: "1",
   stock: "0",
   image_url: "",
   is_active: true,
@@ -176,6 +193,8 @@ export default function SellerProductsPage() {
   function editProduct(product: ShopProduct) {
     setDraft({
       category: product.category,
+      term: product.term,
+      port: product.port,
       sku: product.sku || "",
       title_en: product.title_en,
       title_fa: product.title_fa || "",
@@ -183,6 +202,8 @@ export default function SellerProductsPage() {
       description_fa: product.description_fa || "",
       price: String(product.price),
       currency: product.currency,
+      unit: product.unit,
+      moq: String(product.moq),
       stock: String(product.stock),
       image_url: product.image_url || "",
       is_active: product.is_active,
@@ -199,6 +220,10 @@ export default function SellerProductsPage() {
     if (!seller || saving) return;
     setError("");
     setNotice("");
+    if (!Number.isInteger(Number(draft.moq)) || Number(draft.moq) < 1) {
+      setError(language === "fa" ? "حداقل خرید باید یک یا بیشتر باشد." : "MOQ must be at least 1.");
+      return;
+    }
     if (imageFile && (!imageFile.type.startsWith("image/") || imageFile.size > 5 * 1024 * 1024)) {
       setError(t("validImage"));
       return;
@@ -221,6 +246,8 @@ export default function SellerProductsPage() {
     const payload = {
       seller_id: seller.id,
       category: draft.category.trim() || "Other",
+      term: draft.term,
+      port: draft.port,
       sku: draft.sku.trim() || null,
       title_en: draft.title_en.trim(),
       title_fa: draft.title_fa.trim() || null,
@@ -228,6 +255,8 @@ export default function SellerProductsPage() {
       description_fa: draft.description_fa.trim() || null,
       price: Number(draft.price),
       currency: draft.currency,
+      unit: draft.unit.trim(),
+      moq: Number(draft.moq),
       stock: Number(draft.stock),
       image_url: imageUrl || null,
       is_active: draft.is_active,
@@ -320,11 +349,15 @@ export default function SellerProductsPage() {
         title_en: item.title_en.trim(),
         title_fa: item.title_fa?.trim() || null,
         category: item.category.trim() || "Other",
+        term: item.term,
+        port: item.port,
         sku: item.sku?.trim() || null,
         description_en: item.description_en?.trim() || null,
         description_fa: item.description_fa?.trim() || null,
         price: item.price,
         currency: item.currency,
+        unit: item.unit.trim(),
+        moq: item.moq,
         stock: item.stock,
       })
       .eq("id", item.id)
@@ -353,10 +386,10 @@ export default function SellerProductsPage() {
     if (!activeImport || reviewing) return;
     const pendingItems = importItems.filter((item) => item.review_status === "pending");
     if (pendingItems.length === 0) return;
-    if (pendingItems.some((item) => !item.title_en.trim() || !item.category.trim() || !item.price || item.price <= 0 || !item.currency || item.stock === null || item.stock < 0)) {
+    if (pendingItems.some((item) => !item.title_en.trim() || !item.category.trim() || !item.term || !item.port || !item.price || item.price <= 0 || !item.currency || !item.unit.trim() || item.unit === "Other" || !Number.isInteger(item.moq) || item.moq < 1 || item.stock === null || item.stock < 0)) {
       setImportError(language === "fa"
-        ? "برای انتشار، نام انگلیسی، دسته‌بندی، قیمت، ارز و موجودی هر محصول را تکمیل کنید."
-        : "Before publishing, provide an English name, category, price, currency, and stock for every product.");
+        ? "برای انتشار، نام انگلیسی، دسته‌بندی، شرایط فروش، بندر، قیمت، ارز، واحد، MOQ و موجودی هر محصول را تکمیل کنید."
+        : "Before publishing, provide an English name, category, term, port, price, currency, unit, MOQ, and available stock for every product.");
       return;
     }
     setReviewing(true);
@@ -423,8 +456,13 @@ export default function SellerProductsPage() {
     category: "دسته‌بندی",
     sku: "کد کالا",
     price: "قیمت",
+    term: "شرایط فروش",
+    port: "بندر",
     currency: "ارز",
-    stock: "موجودی",
+    unit: "واحد",
+    moq: "حداقل خرید (MOQ)",
+    stock: "موجودی انبار",
+    otherUnit: "واحد دیگر را وارد کنید",
     descriptionEn: "توضیحات انگلیسی",
     descriptionFa: "توضیحات فارسی",
     reject: "رد",
@@ -447,8 +485,13 @@ export default function SellerProductsPage() {
     category: "Category",
     sku: "SKU",
     price: "Price",
+    term: "Term",
+    port: "Port",
     currency: "Currency",
-    stock: "Stock",
+    unit: "Unit",
+    moq: "Minimum order quantity (MOQ)",
+    stock: "Available stock",
+    otherUnit: "Enter a different unit",
     descriptionEn: "English description",
     descriptionFa: "Persian description",
     reject: "Reject",
@@ -526,7 +569,26 @@ export default function SellerProductsPage() {
           <label>{t("descriptionEn")}<textarea value={draft.description_en} onChange={(event) => setDraft({ ...draft, description_en: event.target.value })} rows={3} /></label>
           <label>{t("descriptionFa")}<textarea dir="rtl" value={draft.description_fa} onChange={(event) => setDraft({ ...draft, description_fa: event.target.value })} rows={3} /></label>
           <label>{t("price")}<input type="number" min="0.01" step="0.01" value={draft.price} onChange={(event) => setDraft({ ...draft, price: event.target.value })} required /></label>
+          <label>{t("term")}
+            <select value={draft.term} onChange={(event) => setDraft({ ...draft, term: event.target.value as ProductDraft["term"] })} required>
+              <option value="FOB">FOB</option><option value="CRF">CRF</option>
+            </select>
+          </label>
+          <label>{t("port")}
+            <select value={draft.port} onChange={(event) => setDraft({ ...draft, port: event.target.value as ProductDraft["port"] })} required>
+              <option value="Shanghai">Shanghai</option><option value="Guangzhou">Guangzhou</option><option value="Ningbo">Ningbo</option><option value="Yiwu">Yiwu</option>
+            </select>
+          </label>
           <label>{t("currency")}<select value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value as ProductDraft["currency"] })}><option value="CNY">CNY</option><option value="USD">USD</option></select></label>
+          <label>{t("unit")}
+            <select value={draft.unit === "Ton" || draft.unit === "Unit" ? draft.unit : "Other"} onChange={(event) => setDraft({ ...draft, unit: event.target.value })} required>
+              <option value="Ton">{language === "fa" ? "تن" : "Ton"}</option><option value="Unit">{language === "fa" ? "عدد" : "Unit"}</option><option value="Other">{language === "fa" ? "سایر" : "Other"}</option>
+            </select>
+          </label>
+          {draft.unit !== "Ton" && draft.unit !== "Unit" && (
+            <label>{language === "fa" ? "واحد دیگر را وارد کنید" : "Enter a different unit"}<input value={draft.unit === "Other" ? "" : draft.unit} required onChange={(event) => setDraft({ ...draft, unit: event.target.value })} /></label>
+          )}
+          <label>{t("moq")}<input type="number" min={1} step={1} value={draft.moq} onChange={(event) => setDraft({ ...draft, moq: event.target.value })} required /></label>
           <label>{t("stock")}<input type="number" min={0} step={1} value={draft.stock} onChange={(event) => setDraft({ ...draft, stock: event.target.value })} required /></label>
           <label className="seller-manual-image">{t("image")}<input type="file" accept="image/*" onChange={(event) => setImageFile(event.target.files?.[0] || null)} /></label>
           {(draft.image_url && !imageFile) || imageFile ? (
@@ -560,6 +622,8 @@ export default function SellerProductsPage() {
                   <th>{t("category")}</th>
                   <th>{t("sku")}</th>
                   <th>{t("price")}</th>
+                  <th>{t("unit")}</th>
+                  <th>{t("moq")}</th>
                   <th>{t("stock")}</th>
                   <th>{t("status")}</th>
                   <th>{t("actions")}</th>
@@ -580,6 +644,8 @@ export default function SellerProductsPage() {
                     <td>{product.category}</td>
                     <td>{product.sku || "—"}</td>
                     <td>{new Intl.NumberFormat(currencyLocale, { style: "currency", currency: product.currency }).format(product.price)}</td>
+                    <td>{getProductUnit(product.unit, language)}</td>
+                    <td>{product.moq}</td>
                     <td>{product.stock}</td>
                     <td><span className={`seller-product-status ${product.is_active ? "published" : "paused"}`}>{product.is_active ? t("active") : t("paused")}</span></td>
                     <td>
@@ -623,11 +689,30 @@ export default function SellerProductsPage() {
                       </label>
                       <label>{pdfCopy.sku}<input value={item.sku || ""} maxLength={80} onChange={(event) => setImportItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, sku: event.target.value } : entry))} /></label>
                       <label>{pdfCopy.price}<input type="number" min="0.01" step="0.01" value={item.price ?? ""} onChange={(event) => setImportItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, price: event.target.value ? Number(event.target.value) : null } : entry))} /></label>
+                      <label>{pdfCopy.term}
+                        <select value={item.term} required onChange={(event) => setImportItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, term: event.target.value as ProductImportItem["term"] } : entry))}>
+                          <option value="FOB">FOB</option><option value="CRF">CRF</option>
+                        </select>
+                      </label>
+                      <label>{pdfCopy.port}
+                        <select value={item.port} required onChange={(event) => setImportItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, port: event.target.value as ProductImportItem["port"] } : entry))}>
+                          <option value="Shanghai">Shanghai</option><option value="Guangzhou">Guangzhou</option><option value="Ningbo">Ningbo</option><option value="Yiwu">Yiwu</option>
+                        </select>
+                      </label>
                       <label>{pdfCopy.currency}
                         <select value={item.currency || ""} onChange={(event) => setImportItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, currency: event.target.value ? event.target.value as "CNY" | "USD" : null } : entry))}>
                           <option value="">—</option><option value="CNY">CNY</option><option value="USD">USD</option>
                         </select>
                       </label>
+                      <label>{pdfCopy.unit}
+                        <select value={item.unit === "Ton" || item.unit === "Unit" ? item.unit : "Other"} required onChange={(event) => setImportItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, unit: event.target.value } : entry))}>
+                          <option value="Ton">{language === "fa" ? "تن" : "Ton"}</option><option value="Unit">{language === "fa" ? "عدد" : "Unit"}</option><option value="Other">{language === "fa" ? "سایر" : "Other"}</option>
+                        </select>
+                      </label>
+                      {item.unit !== "Ton" && item.unit !== "Unit" && (
+                        <label>{pdfCopy.otherUnit}<input value={item.unit === "Other" ? "" : item.unit} required onChange={(event) => setImportItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, unit: event.target.value } : entry))} /></label>
+                      )}
+                      <label>{pdfCopy.moq}<input type="number" min="1" step="1" value={item.moq} onChange={(event) => setImportItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, moq: Number(event.target.value) } : entry))} required /></label>
                       <label>{pdfCopy.stock}<input type="number" min="0" step="1" value={item.stock ?? ""} onChange={(event) => setImportItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, stock: event.target.value ? Number(event.target.value) : null } : entry))} /></label>
                       <label>{pdfCopy.descriptionEn}<textarea rows={2} value={item.description_en || ""} onChange={(event) => setImportItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, description_en: event.target.value } : entry))} /></label>
                       <label>{pdfCopy.descriptionFa}<textarea dir="rtl" rows={2} value={item.description_fa || ""} onChange={(event) => setImportItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, description_fa: event.target.value } : entry))} /></label>

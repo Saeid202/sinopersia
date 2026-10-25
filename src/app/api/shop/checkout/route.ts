@@ -6,6 +6,7 @@ import { getGateway } from "@/lib/payments/registry";
 import { startPayment } from "@/lib/payments/service";
 import { loadRates } from "@/lib/rates";
 import { formatRial, rialAmount } from "@/lib/rial";
+import { getProductUnit } from "@/lib/shop";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,10 @@ type ShopRow = {
   price: number | string;
   currency: "CNY" | "USD";
   stock: number;
+  moq: number | null;
+  unit: string | null;
+  term: string | null;
+  port: string | null;
   sku: string | null;
 };
 
@@ -54,7 +59,7 @@ export async function POST(request: Request) {
 
   const { data: products, error: productError } = await supabase
     .from("shop_products")
-    .select("id, title_fa, title_en, price, currency, stock, sku")
+    .select("id, title_fa, title_en, price, currency, stock, moq, unit, term, port, sku")
     .in("id", [...quantities.keys()])
     .eq("is_active", true);
   if (productError) return NextResponse.json({ error: productError.message }, { status: 500 });
@@ -64,6 +69,9 @@ export async function POST(request: Request) {
     const product = byId.get(productId);
     if (!product) return NextResponse.json({ error: "یک کالا دیگر در فروشگاه نیست. سبد را تازه کنید." }, { status: 400 });
     if (quantity > product.stock) return NextResponse.json({ error: `تعداد ${titleOf(product)} بیش از موجودی است.` }, { status: 400 });
+    if (quantity < (product.moq || 1)) {
+      return NextResponse.json({ error: `حداقل خرید ${titleOf(product)} ${product.moq} ${getProductUnit(product.unit || "Unit")} است.` }, { status: 400 });
+    }
     if (product.currency !== "CNY" && product.currency !== "USD") {
       return NextResponse.json({ error: "ارز یکی از کالاها قابل تبدیل نیست." }, { status: 400 });
     }
@@ -92,7 +100,7 @@ export async function POST(request: Request) {
   const notes = [
     "پرداخت مبلغ کالا از فروشگاه، با نرخ بازار همان لحظه.",
     `مبلغ کالا: ${formatRial(amount)}. هزینهٔ ارسال در این پرداخت نیست.`,
-    ...priced.map((line) => `${titleOf(line.product)} × ${line.quantity} — ${formatRial(line.rial)}`),
+    ...priced.map((line) => `${titleOf(line.product)} × ${line.quantity} ${getProductUnit(line.product.unit || "Unit")} — MOQ: ${line.product.moq || 1} — Term: ${line.product.term || "FOB"} — Port: ${line.product.port || "Shanghai"} — ${formatRial(line.rial)}`),
   ].join("\n");
 
   const { data: order, error: orderError } = await supabase.from("orders").insert({
@@ -110,7 +118,7 @@ export async function POST(request: Request) {
   const { error: itemsError } = await supabase.from("order_products").insert(priced.map((line) => ({
     order_id: order.id,
     link: null,
-    description: `${titleOf(line.product)} | شناسه: ${line.product.id} | تعداد: ${line.quantity} | مبلغ ریال: ${formatRial(line.rial)}`,
+    description: `${titleOf(line.product)} | شناسه: ${line.product.id} | تعداد: ${line.quantity} ${getProductUnit(line.product.unit || "Unit")} | MOQ: ${line.product.moq || 1} | Term: ${line.product.term || "FOB"} | Port: ${line.product.port || "Shanghai"} | مبلغ ریال: ${formatRial(line.rial)}`,
     part_number: line.product.sku,
     shop_product_id: line.product.id,
     quantity: line.quantity,

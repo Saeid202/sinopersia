@@ -24,11 +24,15 @@ create table if not exists public.shop_product_import_items (
   title_en text not null default '',
   title_fa text,
   category text not null default 'Other',
+  term text not null default 'FOB',
+  port text not null default 'Shanghai',
   sku text,
   description_en text,
   description_fa text,
   price numeric(12, 2) check (price is null or price > 0),
   currency text check (currency is null or currency in ('CNY', 'USD')),
+  unit text not null default 'Unit',
+  moq integer not null default 1 check (moq >= 1),
   stock integer check (stock is null or stock >= 0),
   review_status text not null default 'pending'
     check (review_status in ('pending', 'approved', 'rejected')),
@@ -46,7 +50,7 @@ alter table public.shop_product_import_items enable row level security;
 
 grant select, insert, delete on public.shop_product_imports to authenticated;
 grant select, insert on public.shop_product_import_items to authenticated;
-grant update (title_en, title_fa, category, sku, description_en, description_fa, price, currency, stock)
+grant update (title_en, title_fa, category, term, port, sku, description_en, description_fa, price, currency, unit, moq, stock)
 on public.shop_product_import_items to authenticated;
 
 drop policy if exists "Sellers can view own product imports" on public.shop_product_imports;
@@ -196,21 +200,26 @@ begin
     and review_status = 'pending'
     and length(trim(title_en)) > 0
     and length(trim(category)) > 0
+    and length(trim(term)) > 0
+    and length(trim(port)) > 0
     and price is not null
     and currency is not null
+    and length(trim(unit)) > 0
+    and unit <> 'Other'
+    and moq >= 1
     and stock is not null;
 
   if valid_count <> selected_count then
-    raise exception 'Every selected product needs an English name, category, price, currency, and stock value';
+    raise exception 'Every selected product needs an English name, category, term, port, price, currency, unit, MOQ, and stock value';
   end if;
 
   insert into public.shop_products (
-    seller_id, category, sku, title_en, title_fa, description_en, description_fa,
+    seller_id, category, term, port, sku, title_en, title_fa, description_en, description_fa, unit, moq,
     price, currency, stock, image_url, is_active
   )
   select
-    seller_id_value, category, sku, trim(title_en), nullif(trim(title_fa), ''),
-    nullif(trim(description_en), ''), nullif(trim(description_fa), ''),
+    seller_id_value, category, term, port, sku, trim(title_en), nullif(trim(title_fa), ''),
+    nullif(trim(description_en), ''), nullif(trim(description_fa), ''), unit, moq,
     price, currency, stock, null, true
   from public.shop_product_import_items
   where import_id = import_id_input

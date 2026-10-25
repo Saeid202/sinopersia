@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { categoryLabel, formatShopPrice, getProductTitle, type ShopCategory, type ShopProduct } from "@/lib/shop";
+import { categoryLabel, formatShopPrice, getProductTitle, getProductUnit, type ShopCategory, type ShopProduct } from "@/lib/shop";
 import RialPrice from "@/components/RialPrice";
 import { useShopCart } from "@/components/ShopCart";
 
@@ -97,18 +97,19 @@ export default function ShopPage() {
               <article className="shop-product-card" key={product.id}>
                 <Link className="shop-product-image" href={`/shop/${product.id}`} aria-label={`مشاهدهٔ ${getProductTitle(product)}`}>
                   {product.image_url ? <Image src={product.image_url} alt={getProductTitle(product)} fill sizes="(max-width: 620px) 90vw, (max-width: 980px) 42vw, 25vw" unoptimized /> : <span className="shop-image-placeholder" aria-hidden="true">SP</span>}
-                  <span className={`shop-stock-badge ${product.stock > 0 ? "" : "is-out-of-stock"}`}>{product.stock > 0 ? "موجود" : "ناموجود"}</span>
+                  <span className={`shop-stock-badge ${product.stock >= product.moq ? "" : "is-out-of-stock"}`}>{product.stock >= product.moq ? "موجود" : product.stock > 0 ? "کمتر از حداقل خرید" : "ناموجود"}</span>
                 </Link>
                 <div className="shop-product-info">
                   <span className="shop-product-category">{categoryLabel(product.category, categoryRows)}</span>
                   <Link href={`/shop/${product.id}`} className="shop-product-title">{getProductTitle(product)}</Link>
                   {product.sku && <span className="shop-product-sku">کد کالا: <b dir="ltr">{product.sku}</b></span>}
+                  <span className="shop-product-sku">حداقل خرید: {product.moq} {getProductUnit(product.unit)}</span>
                   <div className="shop-product-card-bottom">
                     <div className="shop-price-stack">
                       <strong className="shop-product-price">{formatShopPrice(product.price, product.currency)}</strong>
                       <RialPrice price={product.price} currency={product.currency} />
                     </div>
-                    <button type="button" className="shop-add-icon" disabled={product.stock < 1} aria-label={`افزودن ${getProductTitle(product)} به سبد`} onClick={() => addProduct(product)}>
+                    <button type="button" className="shop-add-icon" disabled={product.stock < product.moq} aria-label={`افزودن ${getProductTitle(product)} به سبد`} onClick={() => addProduct(product)}>
                       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
                     </button>
                   </div>

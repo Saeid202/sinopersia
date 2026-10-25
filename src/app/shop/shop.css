@@ -673,6 +673,13 @@
   font-size: 12px;
 }
 
+.shop-minimum-order {
+  margin-top: 10px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .shop-detail-price-row {
   display: flex;
   align-items: center;

@@ -24,7 +24,8 @@ values
   ('Home Appliances', 'لوازم خانگی', 7),
   ('Clothing & Textiles', 'پوشاک و نساجی', 8),
   ('Other', 'سایر', 9),
-  ('General', 'عمومی', 10)
+  ('General', 'عمومی', 10),
+  ('Steel', 'فولاد', 11)
 on conflict (name_en) do nothing;
 
 create or replace function public.rename_shop_category_products()

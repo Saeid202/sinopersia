@@ -5,7 +5,7 @@ import Link from "next/link";
 import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { categoryLabel, formatShopPrice, getProductTitle, type ShopCategory, type ShopProduct } from "@/lib/shop";
+import { categoryLabel, formatShopPrice, getProductTitle, getProductUnit, type ShopCategory, type ShopProduct } from "@/lib/shop";
 import RialPrice from "@/components/RialPrice";
 import { formatRial, rialAmount } from "@/lib/rial";
 import { useRateBoard } from "@/lib/use-rate-board";
@@ -123,6 +123,17 @@ export default function ShopCartPage() {
       setError(`تعداد درخواستی ${product ? getProductTitle(product) : "یکی از کالاها"} بیش از موجودی فعلی است. تعداد را اصلاح کنید.`);
       return;
     }
+    const belowMinimumLine = availableLines.find((line) => {
+      const product = productById.get(line.productId);
+      return !product || product.stock < product.moq || line.quantity < product.moq;
+    });
+    if (belowMinimumLine) {
+      const product = productById.get(belowMinimumLine.productId);
+      setError(product
+        ? `حداقل خرید ${getProductTitle(product)} ${product.moq} ${getProductUnit(product.unit)} است.`
+        : "حداقل مقدار سفارش را بررسی کنید.");
+      return;
+    }
 
     setSubmitting(true);
     const response = await fetch("/api/shop/checkout", {
@@ -163,17 +174,18 @@ export default function ShopCartPage() {
                 <div><strong>این محصول دیگر در دسترس نیست</strong><small>برای ادامه، آن را از سبد حذف کنید.</small></div>
                 <button type="button" onClick={() => removeProduct(line.productId)}>حذف</button>
               </article>;
-              const overStock = line.quantity > product.stock;
+              const overStock = line.quantity > product.stock || product.stock < product.moq;
+              const belowMinimum = line.quantity < product.moq;
               return <article className="shop-cart-item" key={line.productId}>
                 <Link className="shop-cart-image" href={`/shop/${product.id}`}>
                   {product.image_url ? <Image src={product.image_url} alt={getProductTitle(product)} fill sizes="96px" unoptimized /> : <span className="shop-image-placeholder">SP</span>}
                 </Link>
-                <div className="shop-cart-product"><Link href={`/shop/${product.id}`}>{getProductTitle(product)}</Link><span>{formatShopPrice(product.price, product.currency)} · {categoryLabel(product.category, categories)}</span>{overStock && <small className="shop-stock-warning">فقط {product.stock} عدد موجود است.</small>}</div>
+                <div className="shop-cart-product"><Link href={`/shop/${product.id}`}>{getProductTitle(product)}</Link><span>{formatShopPrice(product.price, product.currency)} · {categoryLabel(product.category, categories)}</span><small>{line.quantity} {getProductUnit(product.unit)} · حداقل خرید: {product.moq} {getProductUnit(product.unit)}</small><small dir="ltr">Term: {product.term} · Port: {product.port}</small>{overStock && <small className="shop-stock-warning">موجودی کافی برای حداقل خرید نیست (موجودی: {product.stock} {getProductUnit(product.unit)}).</small>}{belowMinimum && !overStock && <small className="shop-stock-warning">حداقل خرید {product.moq} {getProductUnit(product.unit)} است.</small>}</div>
                 <div className="shop-cart-item-actions">
                   <div className="shop-quantity-control">
-                    <button type="button" aria-label="افزایش تعداد" disabled={line.quantity >= product.stock} onClick={() => setQuantity(product.id, Math.min(product.stock, line.quantity + 1))}>+</button>
+                    <button type="button" aria-label="افزایش تعداد" disabled={line.quantity >= product.stock || product.stock < product.moq} onClick={() => setQuantity(product, Math.min(product.stock, Math.max(product.moq, line.quantity + 1)))}>+</button>
                     <span>{line.quantity}</span>
-                    <button type="button" aria-label="کاهش تعداد" disabled={line.quantity <= 1} onClick={() => setQuantity(product.id, line.quantity - 1)}>−</button>
+                    <button type="button" aria-label="کاهش تعداد" disabled={line.quantity <= product.moq || product.stock < product.moq} onClick={() => setQuantity(product, line.quantity - 1)}>−</button>
                   </div>
                   <div className="shop-price-stack">
                     <strong>{formatShopPrice(product.price * line.quantity, product.currency)}</strong>

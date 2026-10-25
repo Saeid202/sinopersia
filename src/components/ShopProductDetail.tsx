@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { categoryLabel, formatShopPrice, getProductDescription, getProductTitle, type ShopCategory, type ShopProduct } from "@/lib/shop";
+import { categoryLabel, formatShopPrice, getProductDescription, getProductTitle, getProductUnit, type ShopCategory, type ShopProduct } from "@/lib/shop";
 import RialPrice from "@/components/RialPrice";
 import { useShopCart } from "@/components/ShopCart";
 
@@ -29,7 +29,9 @@ export default function ShopProductDetail({ productId }: { productId: string }) 
           setError("بارگذاری اطلاعات محصول انجام نشد. لطفاً دوباره تلاش کنید.");
           console.error("Failed to load shop product:", productResult.error);
         } else if (productResult.data) {
-          setProduct(productResult.data as ShopProduct);
+          const loadedProduct = productResult.data as ShopProduct;
+          setProduct(loadedProduct);
+          setQuantity(loadedProduct.moq);
         }
         if (!categoryResult.error) setCategories((categoryResult.data as ShopCategory[]) || []);
         setLoading(false);
@@ -60,22 +62,23 @@ export default function ShopProductDetail({ productId }: { productId: string }) 
               <strong className="shop-detail-price">{formatShopPrice(product.price, product.currency)}</strong>
               <RialPrice price={product.price} currency={product.currency} quantity={quantity} />
             </div>
-            <span className={`shop-availability ${product.stock > 0 ? "is-available" : ""}`}><i aria-hidden="true" />{product.stock > 0 ? `موجود · ${product.stock} عدد` : "فعلاً ناموجود"}</span>
+            <span className={`shop-availability ${product.stock >= product.moq ? "is-available" : ""}`}><i aria-hidden="true" />{product.stock >= product.moq ? `موجود · ${product.stock} ${getProductUnit(product.unit)}` : product.stock > 0 ? "موجودی کمتر از حداقل خرید" : "فعلاً ناموجود"}</span>
           </div>
+          <p className="shop-minimum-order">حداقل خرید: {product.moq} {getProductUnit(product.unit)}</p>
           {description && <div className="shop-description"><h2>دربارهٔ محصول</h2><p>{description}</p></div>}
           <div className="shop-detail-actions">
-            <div className="shop-quantity-control" aria-label="تعداد محصول">
+            <div className="shop-quantity-control" aria-label={`تعداد محصول بر حسب ${getProductUnit(product.unit)}`}>
               <button type="button" aria-label="افزایش تعداد" disabled={quantity >= product.stock} onClick={() => setQuantity((count) => Math.min(count + 1, product.stock))}>+</button>
               <span>{quantity}</span>
-              <button type="button" aria-label="کاهش تعداد" disabled={quantity <= 1} onClick={() => setQuantity((count) => Math.max(1, count - 1))}>−</button>
+              <button type="button" aria-label="کاهش تعداد" disabled={quantity <= product.moq} onClick={() => setQuantity((count) => Math.max(product.moq, count - 1))}>−</button>
             </div>
-            <button type="button" className="shop-primary-button shop-detail-add" disabled={product.stock < 1} onClick={() => { addProduct(product, quantity); setAdded(true); }}>
+            <button type="button" className="shop-primary-button shop-detail-add" disabled={product.stock < product.moq} onClick={() => { addProduct(product, quantity); setAdded(true); }}>
               {added ? "به سبد اضافه شد" : "افزودن به سبد خرید"}
             </button>
           </div>
           {added && <button type="button" className="shop-view-cart" onClick={() => router.push("/shop/cart")}>مشاهدهٔ سبد خرید ←</button>}
           <div className="shop-order-assurance"><span>✓</span><p><strong>پرداخت مبلغ کالا</strong><br />در سبد، مبلغ کالا به ریال از درگاه پرداخت می‌شود. هزینهٔ حمل جدا هماهنگ می‌شود.</p></div>
-          <div className="shop-product-meta"><span>دسته‌بندی</span><strong>{categoryLabel(product.category, categories)}</strong><span>فروشنده</span><strong>فروشندهٔ منتخب ساینو پرشیا</strong></div>
+          <div className="shop-product-meta"><span>دسته‌بندی</span><strong>{categoryLabel(product.category, categories)}</strong><span>واحد</span><strong>{getProductUnit(product.unit)}</strong><span>حداقل خرید</span><strong>{product.moq} {getProductUnit(product.unit)}</strong><span>شرایط فروش</span><strong>{product.term}</strong><span>بندر</span><strong>{product.port}</strong><span>فروشنده</span><strong>فروشندهٔ منتخب ساینو پرشیا</strong></div>
         </section>
       </div>
     </div>
